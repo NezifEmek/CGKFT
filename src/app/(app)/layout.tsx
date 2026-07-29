@@ -22,6 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: "/dusus-uyarilari", etiket: "🚨 Düşüş Uyarıları" },
     { href: "/bolge-analizi", etiket: "🗺️ Bölge Analizi" },
     { href: "/ciro-karlilik", etiket: "💰 Ciro & Kârlılık" },
+    { href: "/ice-disa-aktar", etiket: "📥 İçe / Dışa Aktar" },
     ...(adminMi ? [{ href: "/kullanicilar", etiket: "👥 Kullanıcılar" }] : []),
   ];
 

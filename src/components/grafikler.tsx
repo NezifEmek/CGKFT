@@ -5,7 +5,7 @@
 // ve tooltip fonksiyonları istemci tarafında burada kurulur.
 
 import { useEffect, useRef } from "react";
-import type { Chart as ChartTipi, ChartConfiguration } from "chart.js";
+import type { Chart as ChartTipi, ChartConfiguration, ChartType } from "chart.js";
 
 const RENK = {
   ana: "#c0392b",
@@ -20,7 +20,7 @@ const sayiFmt = new Intl.NumberFormat("tr-TR");
 const ondalikFmt = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 });
 
 /** Chart.js'i yalnızca tarayıcıda yükleyip canvas'a bağlar, unmount'ta yok eder. */
-function useChart(config: ChartConfiguration) {
+function useChart<T extends ChartType>(config: ChartConfiguration<T>) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // config her render'da yeni nesne olur; grafiği yalnızca veri değişince
   // yeniden kurmak için JSON imzasını bağımlılık olarak kullanıyoruz.
@@ -35,7 +35,7 @@ function useChart(config: ChartConfiguration) {
         const { Chart, registerables } = await import("chart.js");
         Chart.register(...registerables);
         if (iptal || !canvasRef.current) return;
-        chart = new Chart(canvasRef.current, config);
+        chart = new Chart(canvasRef.current, config as ChartConfiguration);
       } catch (err) {
         console.error("Grafik çizilemedi:", err);
       }
@@ -51,7 +51,13 @@ function useChart(config: ChartConfiguration) {
   return canvasRef;
 }
 
-function Tuval({ config, yukseklik }: { config: ChartConfiguration; yukseklik: number }) {
+function Tuval<T extends ChartType>({
+  config,
+  yukseklik,
+}: {
+  config: ChartConfiguration<T>;
+  yukseklik: number;
+}) {
   const ref = useChart(config);
   return (
     <div style={{ height: yukseklik }} className="relative">
@@ -244,7 +250,7 @@ export function SegmentDonut({
   renkler: string[];
   yukseklik?: number;
 }) {
-  const config: ChartConfiguration = {
+  const config: ChartConfiguration<"doughnut"> = {
     type: "doughnut",
     data: {
       labels: etiketler,
