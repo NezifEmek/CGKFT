@@ -10,6 +10,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const menu: MenuOgesi[] = [
     { href: "/", etiket: "📊 Genel Bakış" },
     { href: "/subeler", etiket: "🏪 Şubeler" },
+    ...(profile.rol !== "denetmen"
+      ? [{ href: "/sube-yonetimi", etiket: "⚙️ Şube Yönetimi" }]
+      : []),
     { href: "/top30", etiket: "🏆 Top 30 Şube" },
     { href: "/yoy-karsilastirma", etiket: "📈 2026 vs 2025" },
     { href: "/aylik-degisim", etiket: "🔀 Aylık Değişim Analizi" },
@@ -17,6 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: "/segment-takibi", etiket: "🧭 Segment Takibi" },
     { href: "/dusus-uyarilari", etiket: "🚨 Düşüş Uyarıları" },
     { href: "/bolge-analizi", etiket: "🗺️ Bölge Analizi" },
+    { href: "/ciro-karlilik", etiket: "💰 Ciro & Kârlılık" },
     ...(adminMi ? [{ href: "/kullanicilar", etiket: "👥 Kullanıcılar" }] : []),
   ];
 

@@ -275,6 +275,56 @@ export function SegmentDonut({
   return <Tuval config={config} yukseklik={yukseklik} />;
 }
 
+/** Gruplu dikey çubuk — ör. aylık ciro / maliyet / kâr. */
+export function GrupluCubukGrafik({
+  etiketler,
+  seriler,
+  paraBirimi = "TL",
+  yukseklik = 300,
+}: {
+  etiketler: string[];
+  seriler: { ad: string; degerler: number[]; renk: string }[];
+  paraBirimi?: string;
+  yukseklik?: number;
+}) {
+  const config: ChartConfiguration = {
+    type: "bar",
+    data: {
+      labels: etiketler,
+      datasets: seriler.map((s) => ({
+        label: s.ad,
+        data: s.degerler,
+        backgroundColor: s.renk,
+        borderRadius: 3,
+      })),
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { position: "top", labels: { color: RENK.metin, boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) =>
+              `${ctx.dataset.label}: ${sayiFmt.format(Math.round(Number(ctx.parsed.y) || 0))} ${paraBirimi}`,
+          },
+        },
+      },
+      scales: {
+        x: ORTAK_EKSEN,
+        y: {
+          ...ORTAK_EKSEN,
+          ticks: { ...ORTAK_EKSEN.ticks, callback: (v) => sayiFmt.format(Number(v)) },
+        },
+      },
+    },
+  };
+
+  return <Tuval config={config} yukseklik={yukseklik} />;
+}
+
 /** Yatay çubuk — bölge / il kırılımı gibi sıralı listeler için. */
 export function YatayCubukGrafik({
   etiketler,

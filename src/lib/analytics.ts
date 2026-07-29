@@ -2,7 +2,7 @@
 // Supabase şemasına göre yeniden yazılmış hali. Saf fonksiyonlar — sayfa
 // bileşenleri veriyi çekip bu fonksiyonlara geçirir.
 
-import type { Sube, AylikSatis, Ay } from "@/types/database";
+import type { Sube, AylikSatis, Ay, FiyatModeli } from "@/types/database";
 import { AYLAR_12 } from "@/types/database";
 
 export interface Esik {
@@ -435,6 +435,150 @@ export function acikSubeSayisi(
     bulunan.add(s.sube_id);
   }
   return bulunan.size;
+}
+
+// ─── Ciro / maliyet / kâr ────────────────────────────────────────────────
+// Eski panelin subeFiyat/birimMaliyet/subeCiro/ayCiroOzet karşılıkları.
+// Not: bu bir VARSAYIM modelidir — gerçek fatura verisi değil, kg × birim fiyat.
+
+/** Şubenin birim satış fiyatı (TL/kg) — tip + fiyat grubuna göre. */
+export function subeFiyat(sube: Sube, model: FiyatModeli): number {
+  const f = model.satis_fiyati ?? {};
+  if (sube.tip === "MS") return f["MS"] ?? 0;
+  return (sube.fiyat_grubu === "lojistik" ? f["FR_lojistik"] : f["FR_dagitim"]) ?? 0;
+}
+
+/** Bir ayın birim maliyeti (TL/kg) — aylık tanım yoksa varsayılan. */
+export function birimMaliyet(ay: string, model: FiyatModeli): number {
+  return model.birim_maliyet_aylik?.[ay] ?? model.birim_maliyet_varsayilan ?? 0;
+}
+
+export interface SubeCiro {
+  subeId: string;
+  kg: number;
+  fiyat: number;
+  ciro: number;
+  maliyet: number;
+  kar: number;
+  marj: number;
+}
+
+/** Her şube için kümülatif ciro/maliyet/kâr. */
+export function subeCiroHesapla(
+  subeler: Sube[],
+  satislar: AylikSatis[],
+  yil: number,
+  aylar: string[],
+  model: FiyatModeli,
+): Map<string, SubeCiro> {
+  const aySet = new Set(aylar);
+  const subeMap = new Map(subeler.map((s) => [s.id, s]));
+
+  const sonuc = new Map<string, SubeCiro>();
+  for (const s of subeler) {
+    sonuc.set(s.id, {
+      subeId: s.id,
+      kg: 0,
+      fiyat: subeFiyat(s, model),
+      ciro: 0,
+      maliyet: 0,
+      kar: 0,
+      marj: 0,
+    });
+  }
+
+  for (const satir of satislar) {
+    if (satir.yil !== yil || !aySet.has(satir.ay)) continue;
+    const sube = subeMap.get(satir.sube_id);
+    const hedef = sonuc.get(satir.sube_id);
+    if (!sube || !hedef) continue;
+
+    const kg = Number(satir.kg) || 0;
+    hedef.kg += kg;
+    hedef.ciro += kg * hedef.fiyat;
+    hedef.maliyet += kg * birimMaliyet(satir.ay, model);
+  }
+
+  for (const c of sonuc.values()) {
+    c.kar = c.ciro - c.maliyet;
+    c.marj = c.ciro ? c.kar / c.ciro : 0;
+  }
+  return sonuc;
+}
+
+export interface AyCiro {
+  ay: string;
+  kg: number;
+  ciro: number;
+  maliyet: number;
+  brutKar: number;
+  marj: number;
+}
+
+/** Ay ay şirket ciro özeti (tip: "MS" | "FR" | null=tümü). */
+export function aylikCiroHesapla(
+  subeler: Sube[],
+  satislar: AylikSatis[],
+  yil: number,
+  aylar: string[],
+  model: FiyatModeli,
+  tip: "MS" | "FR" | null = null,
+): AyCiro[] {
+  const kapsam = tip ? subeler.filter((s) => s.tip === tip) : subeler;
+  const subeMap = new Map(kapsam.map((s) => [s.id, s]));
+
+  const ayaGore = new Map<string, { kg: number; ciro: number; maliyet: number }>();
+  for (const ay of aylar) ayaGore.set(ay, { kg: 0, ciro: 0, maliyet: 0 });
+
+  for (const satir of satislar) {
+    if (satir.yil !== yil) continue;
+    const g = ayaGore.get(satir.ay);
+    const sube = subeMap.get(satir.sube_id);
+    if (!g || !sube) continue;
+
+    const kg = Number(satir.kg) || 0;
+    g.kg += kg;
+    g.ciro += kg * subeFiyat(sube, model);
+    g.maliyet += kg * birimMaliyet(satir.ay, model);
+  }
+
+  return aylar.map((ay) => {
+    const g = ayaGore.get(ay)!;
+    const brutKar = g.ciro - g.maliyet;
+    return { ay, kg: g.kg, ciro: g.ciro, maliyet: g.maliyet, brutKar, marj: g.ciro ? brutKar / g.ciro : 0 };
+  });
+}
+
+export interface CiroOzet {
+  kg: number;
+  ciro: number;
+  maliyet: number;
+  brutKar: number;
+  sabit: number;
+  netKar: number;
+  marj: number;
+}
+
+/** Kümülatif ciro özeti — sabit gider aylık × ay sayısı düşülerek net kâr. */
+export function kumulatifCiroOzet(trend: AyCiro[], model: FiyatModeli, aySayisi: number): CiroOzet {
+  const ciro = trend.reduce((t, x) => t + x.ciro, 0);
+  const maliyet = trend.reduce((t, x) => t + x.maliyet, 0);
+  const kg = trend.reduce((t, x) => t + x.kg, 0);
+  const brutKar = ciro - maliyet;
+  const sabit = (model.sabit_gider_aylik || 0) * aySayisi;
+  return {
+    kg,
+    ciro,
+    maliyet,
+    brutKar,
+    sabit,
+    netKar: brutKar - sabit,
+    marj: ciro ? brutKar / ciro : 0,
+  };
+}
+
+export function paraFmt(n: number, birim = "TL"): string {
+  return `${new Intl.NumberFormat("tr-TR").format(Math.round(n))} ${birim}`;
 }
 
 export function yuzdeFmt(n: number): string {

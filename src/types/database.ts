@@ -71,6 +71,17 @@ export interface Skor {
   created_at: string;
 }
 
+export interface FiyatModeli {
+  id: number;
+  para_birimi: string;
+  /** Anahtarlar: "MS" | "FR_dagitim" | "FR_lojistik" — TL/kg satış fiyatı. */
+  satis_fiyati: Record<string, number>;
+  birim_maliyet_varsayilan: number;
+  /** Ay adına göre birim maliyet override'ı; yoksa varsayılan kullanılır. */
+  birim_maliyet_aylik: Record<string, number>;
+  sabit_gider_aylik: number;
+}
+
 export const AYLAR_12 = [
   "OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN",
   "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK",
