@@ -37,22 +37,7 @@ export async function kgKaydet(subeId: string, yil: number, ay: string, kg: numb
   return { hata: null };
 }
 
-export async function ayEkle(_onceki: { hata?: string } | null, formData: FormData) {
-  const supabase = await createClient();
-
-  const yil = Number(formData.get("yil") || 0);
-  const ay = String(formData.get("ay") || "");
-  const gunSayisi = Number(formData.get("gun_sayisi") || 30);
-
-  const { error } = await supabase
-    .from("aylar")
-    .upsert({ yil, ay, gun_sayisi: gunSayisi }, { onConflict: "yil,ay" });
-
-  if (error) return { hata: "Ay eklenemedi: " + error.message };
-
-  revalidatePath("/subeler");
-  return { hata: undefined };
-}
+// Ay ekleme/silme artık /aylar-veri ekranında (yetki kontrolü + doğrulama ile).
 
 export async function denetimEkle(_onceki: { hata?: string } | null, formData: FormData) {
   const profile = await requireProfile();

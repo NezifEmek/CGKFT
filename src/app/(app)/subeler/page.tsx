@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import type { Sube } from "@/types/database";
 import { SubeEkleForm } from "./sube-ekle-form";
-import { AyEkleForm } from "./ay-ekle-form";
 
 export default async function SubelerSayfasi() {
   const profile = await requireProfile();
@@ -32,7 +31,6 @@ export default async function SubelerSayfasi() {
       {duzenleyebilir && (
         <div className="space-y-3">
           <SubeEkleForm kilitliBolge={profile.rol === "bolge_muduru" ? profile.bolge : null} />
-          {(profile.rol === "admin" || profile.rol === "genel_mudur") && <AyEkleForm />}
         </div>
       )}
 
