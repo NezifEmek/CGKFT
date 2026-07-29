@@ -16,6 +16,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: "/top30", etiket: "🏆 Top 30 Şube" },
     { href: "/yoy-karsilastirma", etiket: "📈 2026 vs 2025" },
     { href: "/aylik-degisim", etiket: "🔀 Aylık Değişim Analizi" },
+    { href: "/kpi-takibi", etiket: "🎯 KPI Takibi" },
+    { href: "/yetkili-analizi", etiket: "🧑‍💼 Yetkili Analizi" },
     { href: "/aylar-veri", etiket: "🗓️ Aylar & Veri" },
     { href: "/segmentasyon", etiket: "⭐ Segmentasyon" },
     { href: "/segment-takibi", etiket: "🧭 Segment Takibi" },

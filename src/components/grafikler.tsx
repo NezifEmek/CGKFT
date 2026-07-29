@@ -238,6 +238,59 @@ export function MerkezFranchiseGrafik({
   return <Tuval config={config} yukseklik={yukseklik} />;
 }
 
+/** Genel çoklu çizgi — ör. yetkili bazlı aylık kg karşılaştırması. */
+export function CokluCizgiGrafik({
+  etiketler,
+  seriler,
+  birim = "kg",
+  yukseklik = 300,
+}: {
+  etiketler: string[];
+  seriler: { ad: string; degerler: number[]; renk: string }[];
+  birim?: string;
+  yukseklik?: number;
+}) {
+  const config: ChartConfiguration = {
+    type: "line",
+    data: {
+      labels: etiketler,
+      datasets: seriler.map((s) => ({
+        label: s.ad,
+        data: s.degerler,
+        borderColor: s.renk,
+        backgroundColor: s.renk,
+        pointRadius: 3,
+        borderWidth: 2,
+        tension: 0.3,
+      })),
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { position: "top", labels: { color: RENK.metin, boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) =>
+              `${ctx.dataset.label}: ${sayiFmt.format(Math.round(Number(ctx.parsed.y) || 0))} ${birim}`,
+          },
+        },
+      },
+      scales: {
+        x: ORTAK_EKSEN,
+        y: {
+          ...ORTAK_EKSEN,
+          ticks: { ...ORTAK_EKSEN.ticks, callback: (v) => sayiFmt.format(Number(v)) },
+        },
+      },
+    },
+  };
+
+  return <Tuval config={config} yukseklik={yukseklik} />;
+}
+
 /** Segment dağılımı — halka (donut) grafik. */
 export function SegmentDonut({
   etiketler,
