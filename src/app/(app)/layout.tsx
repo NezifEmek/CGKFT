@@ -10,6 +10,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const menu = [
     { href: "/", etiket: "📊 Genel Bakış" },
     { href: "/subeler", etiket: "🏪 Şubeler" },
+    { href: "/top30", etiket: "🏆 Top 30 Şube" },
+    { href: "/yoy-karsilastirma", etiket: "📈 2026 vs 2025" },
+    { href: "/aylik-degisim", etiket: "🔀 Aylık Değişim Analizi" },
+    { href: "/segmentasyon", etiket: "⭐ Segmentasyon" },
+    { href: "/segment-takibi", etiket: "🧭 Segment Takibi" },
+    { href: "/dusus-uyarilari", etiket: "🚨 Düşüş Uyarıları" },
+    { href: "/bolge-analizi", etiket: "🗺️ Bölge Analizi" },
     ...(adminMi ? [{ href: "/kullanicilar", etiket: "👥 Kullanıcılar" }] : []),
   ];
 

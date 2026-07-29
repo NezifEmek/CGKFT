@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube } from "@/types/database";
 
 function fmtKg(n: number) {
@@ -17,11 +18,10 @@ export default async function GenelBakisSayfasi() {
 
   let toplamKg = 0;
   if (subeIdler.length) {
-    const { data: satislar } = await supabase
-      .from("aylik_satislar")
-      .select("kg")
-      .in("sube_id", subeIdler);
-    toplamKg = (satislar ?? []).reduce((t, r) => t + Number(r.kg), 0);
+    const satislar = await tumSatirlariGetir<{ kg: number }>((from, to) =>
+      supabase.from("aylik_satislar").select("kg").in("sube_id", subeIdler).range(from, to),
+    );
+    toplamKg = satislar.reduce((t, r) => t + Number(r.kg), 0);
   }
 
   const aktifSube = (subeler ?? []).filter((s) => s.aktif).length;
