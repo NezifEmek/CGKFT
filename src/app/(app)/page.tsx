@@ -9,17 +9,100 @@ import {
   subeKgOzetleri,
   kirilimHesapla,
   segmentBul,
-  kgFmt,
-  yuzdeFmt,
+  aylikTrendHesapla,
+  kumulatifOzetHesapla,
+  aylikYoYHesapla,
+  acikSubeSayisi,
   type Esik,
 } from "@/lib/analytics";
+import {
+  AylikTrendGrafik,
+  MerkezFranchiseGrafik,
+  SegmentDonut,
+  YatayCubukGrafik,
+} from "@/components/grafikler";
 
 const CARI_YIL = 2026;
 const ONCEKI_YIL = 2025;
 
-export default async function GenelBakisSayfasi() {
+const fmt = (n: number) => new Intl.NumberFormat("tr-TR").format(Math.round(n));
+const fmt2 = (n: number) =>
+  new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+const fmt1 = (n: number) =>
+  new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(n);
+
+/** ▲ %8 / ▼ %1 rozeti — eski paneldeki yoyDeg() karşılığı. */
+function Degisim({ oran }: { oran: number | null }) {
+  if (oran === null) return <span className="text-neutral-400">—</span>;
+  const artiMi = oran >= 0;
+  return (
+    <b className={artiMi ? "text-emerald-600" : "text-red-500"}>
+      {artiMi ? "▲" : "▼"} %{Math.abs(Math.round(oran * 100))}
+    </b>
+  );
+}
+
+function KpiKart({
+  etiket,
+  deger,
+  birim,
+  alt,
+  dip,
+  renk,
+}: {
+  etiket: string;
+  deger: string;
+  birim?: string;
+  alt: React.ReactNode;
+  dip: React.ReactNode;
+  renk: string;
+}) {
+  return (
+    <div
+      className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 border-l-4"
+      style={{ borderLeftColor: renk }}
+    >
+      <div className="text-[11px] uppercase tracking-wide text-neutral-500 mb-1">{etiket}</div>
+      <div className="text-2xl font-bold leading-tight">
+        {deger}
+        {birim && <small className="text-sm font-medium text-neutral-500 ml-1">{birim}</small>}
+      </div>
+      <div className="text-xs text-neutral-500 mt-1">{alt}</div>
+      <div className="mt-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 text-[11px] text-neutral-500">
+        {dip}
+      </div>
+    </div>
+  );
+}
+
+function Kart({
+  baslik,
+  sagUst,
+  children,
+}: {
+  baslik: string;
+  sagUst?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+      <div className="px-4 py-2.5 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
+        <h3 className="font-medium text-sm">{baslik}</h3>
+        {sagUst}
+      </div>
+      <div className="p-4">{children}</div>
+    </div>
+  );
+}
+
+export default async function GenelBakisSayfasi({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const profile = await requireProfile();
   const supabase = await createClient();
+  const sp = await searchParams;
 
   // RLS sayesinde bu sorgular otomatik olarak kullanıcının rolüne göre scoplanır
   // (denetmen: atandığı şube; bölge müdürü: kendi bölgesi; admin/GM: hepsi).
@@ -34,67 +117,85 @@ export default async function GenelBakisSayfasi() {
 
   const subelerListe = subeler ?? [];
   const gunMap = gunSayisiMap(aylar ?? []);
-  const aktifAylar = aySirala((aylar ?? []).filter((a) => a.yil === CARI_YIL).map((a) => a.ay));
+  const tumAylar = aySirala((aylar ?? []).filter((a) => a.yil === CARI_YIL).map((a) => a.ay));
   const esikler = (segmentAyar?.esikler ?? []) as Esik[];
 
-  const ozetCari = subeKgOzetleri(subelerListe, satislar, CARI_YIL, aktifAylar, gunMap);
-  const ozetOnceki = subeKgOzetleri(subelerListe, satislar, ONCEKI_YIL, aktifAylar, gunMap);
+  if (!tumAylar.length) {
+    return (
+      <div>
+        <h1 className="text-xl font-semibold mb-4">Genel Bakış</h1>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300">
+          Henüz tanımlı ay yok. <b>Şubeler</b> ekranından ay ekleyin.
+        </div>
+      </div>
+    );
+  }
 
-  const toplamKg = [...ozetCari.values()].reduce((t, o) => t + o.toplamKg, 0);
-  const toplamKgOnceki = [...ozetOnceki.values()].reduce((t, o) => t + o.toplamKg, 0);
-  const toplamGun = [...ozetCari.values()].reduce((t, o) => t + o.toplamGun, 0);
-  const gunlukOrtalama = toplamGun > 0 ? toplamKg / toplamGun : 0;
-  const yoyYuzde = toplamKgOnceki > 0 ? ((toplamKg - toplamKgOnceki) / toplamKgOnceki) * 100 : null;
+  // ── Dönem aralığı ────────────────────────────────────────────────────────
+  const bas = tumAylar.includes(sp.bas ?? "") ? sp.bas! : tumAylar[0];
+  const bit = tumAylar.includes(sp.bit ?? "") ? sp.bit! : tumAylar[tumAylar.length - 1];
+  const i1 = tumAylar.indexOf(bas);
+  const i2 = tumAylar.indexOf(bit);
+  const secilenAylar = tumAylar.slice(Math.min(i1, i2), Math.max(i1, i2) + 1);
+  const tumAyMi = secilenAylar.length === tumAylar.length;
 
-  const aktifSube = subelerListe.filter((s) => s.aktif).length;
-  const msSube = subelerListe.filter((s) => s.tip === "MS").length;
-  const frSube = subelerListe.filter((s) => s.tip === "FR").length;
+  // ── Şirket özetleri (eski panelin kumulatifOzet mantığı) ─────────────────
+  const trend = aylikTrendHesapla(subelerListe, satislar, CARI_YIL, secilenAylar, gunMap);
+  const trendMs = aylikTrendHesapla(subelerListe, satislar, CARI_YIL, secilenAylar, gunMap, "MS");
+  const trendFr = aylikTrendHesapla(subelerListe, satislar, CARI_YIL, secilenAylar, gunMap, "FR");
 
-  const kartlar = [
-    { etiket: "Görünür Şube", deger: String(subelerListe.length) },
-    { etiket: "Aktif Şube", deger: String(aktifSube) },
-    { etiket: "MŞ / FR", deger: `${msSube} / ${frSube}` },
-    {
-      etiket: "Toplam Satış",
-      deger: kgFmt(toplamKg),
-      altSatir: yoyYuzde != null ? `${ONCEKI_YIL}'e göre ${yuzdeFmt(yoyYuzde)}` : undefined,
-    },
-    { etiket: "Günlük Ortalama", deger: `${gunlukOrtalama.toFixed(1)} kg/gün` },
-  ];
+  const kum = kumulatifOzetHesapla(subelerListe, trend);
+  const ms = kumulatifOzetHesapla(subelerListe, trendMs, "MS");
+  const fr = kumulatifOzetHesapla(subelerListe, trendFr, "FR");
 
-  // ── Aylık trend (2026 vs 2025) ──────────────────────────────────────────
-  const aylikTrend = aktifAylar.map((ay) => {
-    let cari = 0;
-    let onceki = 0;
-    for (const o of ozetCari.values()) cari += o.aylikKg[ay] ?? 0;
-    for (const o of ozetOnceki.values()) onceki += o.aylikKg[ay] ?? 0;
-    return { ay, cari, onceki };
-  });
-  const trendMax = Math.max(1, ...aylikTrend.flatMap((t) => [t.cari, t.onceki]));
+  const yoy = aylikYoYHesapla(subelerListe, satislar, CARI_YIL, ONCEKI_YIL, secilenAylar);
+  const yoyKgCari = yoy.reduce((t, r) => t + r.kgCari, 0);
+  const yoyKgOnceki = yoy.reduce((t, r) => t + r.kgOnceki, 0);
+  const yoyDegisim = yoyKgOnceki > 0 ? (yoyKgCari - yoyKgOnceki) / yoyKgOnceki : null;
 
-  // ── Bölge dağılımı (ilk 5) ───────────────────────────────────────────────
-  const bolgeler = kirilimHesapla(subelerListe, ozetCari, (s) => s.bolge).slice(0, 5);
+  const msSubeler = subelerListe.filter((s) => s.tip === "MS");
+  const frSubeler = subelerListe.filter((s) => s.tip === "FR");
+  const yoyMsOnceki = aylikYoYHesapla(msSubeler, satislar, CARI_YIL, ONCEKI_YIL, secilenAylar).reduce(
+    (t, r) => t + r.kgOnceki,
+    0,
+  );
+  const yoyFrOnceki = aylikYoYHesapla(frSubeler, satislar, CARI_YIL, ONCEKI_YIL, secilenAylar).reduce(
+    (t, r) => t + r.kgOnceki,
+    0,
+  );
+  const msDegisim = yoyMsOnceki > 0 ? (ms.kg - yoyMsOnceki) / yoyMsOnceki : null;
+  const frDegisim = yoyFrOnceki > 0 ? (fr.kg - yoyFrOnceki) / yoyFrOnceki : null;
 
-  // ── Segment dağılımı ─────────────────────────────────────────────────────
-  const segmentSayim = new Map<string, { esik: Esik; adet: number; kg: number }>();
-  for (const e of esikler) segmentSayim.set(e.ad, { esik: e, adet: 0, kg: 0 });
+  const acikSube25 = acikSubeSayisi(subelerListe, satislar, ONCEKI_YIL, secilenAylar);
+  const ort25 =
+    yoyKgOnceki > 0 && acikSube25 > 0
+      ? yoyKgOnceki / acikSube25 / secilenAylar.length / 30
+      : null;
+  const ortDegisim = ort25 !== null && ort25 > 0 ? (kum.ort - ort25) / ort25 : null;
+
+  const ilkOrt = trend[0]?.ort ?? 0;
+  const sonAy = trend[trend.length - 1];
+  const ilkAyaGore = ilkOrt ? (sonAy.ort - ilkOrt) / ilkOrt : null;
+  const sonAyYoy = yoy.find((r) => r.ay === sonAy?.ay) ?? null;
+
+  const oran = (x: number) => (kum.kg ? Math.round((x / kum.kg) * 100) : 0);
+
+  // ── Grafikler için kırılımlar ────────────────────────────────────────────
+  const ozetCari = subeKgOzetleri(subelerListe, satislar, CARI_YIL, secilenAylar, gunMap);
+  const bolgeler = kirilimHesapla(subelerListe, ozetCari, (s) => s.bolge);
+
+  const segmentSayim = new Map<string, { esik: Esik; adet: number }>();
+  for (const e of esikler) segmentSayim.set(e.ad, { esik: e, adet: 0 });
   for (const sube of subelerListe) {
     const o = ozetCari.get(sube.id);
     if (!o || o.toplamKg <= 0) continue;
     const eslesen = segmentBul(o.kgGunluk, esikler);
-    if (!eslesen) continue;
-    const s = segmentSayim.get(eslesen.ad);
-    if (s) {
-      s.adet++;
-      s.kg += o.toplamKg;
-    }
+    if (eslesen) segmentSayim.get(eslesen.ad)!.adet++;
   }
   const segmentListe = [...segmentSayim.values()]
     .filter((s) => s.adet > 0)
     .sort((a, b) => b.esik.min - a.esik.min);
-  const segmentToplam = segmentListe.reduce((t, s) => t + s.adet, 0) || 1;
 
-  // ── Top 10 şube ───────────────────────────────────────────────────────────
   const top10 = subelerListe
     .map((s) => ({ sube: s, kg: ozetCari.get(s.id)?.toplamKg ?? 0 }))
     .filter((r) => r.kg > 0)
@@ -102,33 +203,142 @@ export default async function GenelBakisSayfasi() {
     .slice(0, 10);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold mb-1">Genel Bakış</h1>
         <p className="text-sm text-neutral-500">
           {profile.ad_soyad ? `Hoş geldin, ${profile.ad_soyad}.` : "Hoş geldin."} Aşağıdaki rakamlar
-          yalnızca yetkili olduğun şubeleri, {aktifAylar[0]} – {aktifAylar[aktifAylar.length - 1]}{" "}
-          dönemini kapsar.
+          yalnızca yetkili olduğun şubeleri kapsar.
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {kartlar.map((k) => (
-          <div
-            key={k.etiket}
-            className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4"
+      {/* Dönem seçici */}
+      <form
+        method="get"
+        className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-4 py-3 flex items-center gap-2.5 flex-wrap"
+      >
+        <span className="font-semibold text-[13px]">📅 Dönem:</span>
+        <select
+          name="bas"
+          defaultValue={bas}
+          className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2 py-1.5 text-sm"
+        >
+          {tumAylar.map((a) => (
+            <option key={a} value={a}>
+              {a}
+            </option>
+          ))}
+        </select>
+        <span className="text-neutral-400">—</span>
+        <select
+          name="bit"
+          defaultValue={bit}
+          className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2 py-1.5 text-sm"
+        >
+          {tumAylar.map((a) => (
+            <option key={a} value={a}>
+              {a}
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          className="rounded-md bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 px-3 py-1.5 text-sm font-medium"
+        >
+          Uygula
+        </button>
+        <span className="text-xs text-neutral-500">{secilenAylar.length} ay</span>
+        {!tumAyMi && (
+          <Link
+            href="/"
+            className="text-xs rounded-md border border-neutral-300 dark:border-neutral-700 px-2.5 py-1.5"
           >
-            <div className="text-xs text-neutral-500 mb-1">{k.etiket}</div>
-            <div className="text-lg font-semibold">{k.deger}</div>
-            {k.altSatir && (
-              <div
-                className={`text-xs mt-0.5 ${yoyYuzde != null && yoyYuzde >= 0 ? "text-emerald-600" : "text-red-600"}`}
-              >
-                {k.altSatir}
-              </div>
-            )}
-          </div>
-        ))}
+            ✕ Tümünü göster
+          </Link>
+        )}
+      </form>
+
+      {/* KPI kartları */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        <KpiKart
+          renk="#c0392b"
+          etiket={`Toplam Satış (${secilenAylar.length} ay)`}
+          deger={fmt(kum.kg)}
+          birim="kg"
+          alt={`${secilenAylar[0]} – ${secilenAylar[secilenAylar.length - 1]}`}
+          dip={
+            <>
+              {ONCEKI_YIL}: {fmt(yoyKgOnceki)} kg · <Degisim oran={yoyDegisim} />
+            </>
+          }
+        />
+        <KpiKart
+          renk="#f59e0b"
+          etiket="Günlük Ortalama"
+          deger={fmt2(kum.ort)}
+          birim="kg/gün"
+          alt="şube · gün başına"
+          dip={
+            <>
+              {ONCEKI_YIL}: {ort25 !== null ? fmt2(ort25) : "—"} kg/gün · <Degisim oran={ortDegisim} />
+            </>
+          }
+        />
+        <KpiKart
+          renk="#2563eb"
+          etiket="Aktif Şube"
+          deger={fmt(kum.aktifSube)}
+          alt={`${fmt(kum.toplamSube)} toplam kayıt`}
+          dip={`${ONCEKI_YIL}: ${fmt(acikSube25)} şube açıktı`}
+        />
+        <KpiKart
+          renk="#16a34a"
+          etiket={`Son Ay (${sonAy?.ay ?? "—"})`}
+          deger={fmt(sonAy?.kg ?? 0)}
+          birim="kg"
+          alt={
+            ilkAyaGore === null ? (
+              "İlk aya göre —"
+            ) : (
+              <>
+                İlk aya göre{" "}
+                <span className={ilkAyaGore >= 0 ? "text-emerald-600" : "text-red-500"}>
+                  {ilkAyaGore >= 0 ? "+" : ""}%{fmt1(ilkAyaGore * 100)}
+                </span>
+              </>
+            )
+          }
+          dip={
+            <>
+              {ONCEKI_YIL}: {sonAyYoy ? `${fmt(sonAyYoy.kgOnceki)} kg` : "—"} ·{" "}
+              <Degisim oran={sonAyYoy?.degisim ?? null} />
+            </>
+          }
+        />
+        <KpiKart
+          renk="#7c3aed"
+          etiket="Merkez Şube (MŞ)"
+          deger={fmt(ms.kg)}
+          birim={`kg · %${oran(ms.kg)}`}
+          alt={`${fmt(ms.toplamSube)} şube · ort ${fmt2(ms.ort)} kg/gün`}
+          dip={
+            <>
+              {ONCEKI_YIL}: {fmt(yoyMsOnceki)} kg · <Degisim oran={msDegisim} />
+            </>
+          }
+        />
+        <KpiKart
+          renk="#c0392b"
+          etiket="Franchise (FR)"
+          deger={fmt(fr.kg)}
+          birim={`kg · %${oran(fr.kg)}`}
+          alt={`${fmt(fr.toplamSube)} şube · ort ${fmt2(fr.ort)} kg/gün`}
+          dip={
+            <>
+              {ONCEKI_YIL}: {fmt(yoyFrOnceki)} kg · <Degisim oran={frDegisim} />
+            </>
+          }
+        />
       </div>
 
       {!subelerListe.length && (
@@ -140,157 +350,134 @@ export default async function GenelBakisSayfasi() {
 
       {subelerListe.length > 0 && (
         <>
-          <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">
-            <div className="flex items-center justify-between mb-4">
-              <div className="font-medium text-sm">Aylık Satış Trendi</div>
-              <div className="flex items-center gap-3 text-xs text-neutral-500">
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-neutral-900 dark:bg-neutral-100 inline-block" />
-                  {CARI_YIL}
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-sm bg-neutral-300 dark:bg-neutral-700 inline-block" />
-                  {ONCEKI_YIL}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-end gap-4 h-40">
-              {aylikTrend.map((t) => (
-                <div key={t.ay} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="flex items-end gap-1 h-32 w-full justify-center">
-                    <div
-                      className="w-3 md:w-4 bg-neutral-900 dark:bg-neutral-100 rounded-t"
-                      style={{ height: `${(t.cari / trendMax) * 100}%` }}
-                      title={`${t.ay} ${CARI_YIL}: ${kgFmt(t.cari)}`}
-                    />
-                    <div
-                      className="w-3 md:w-4 bg-neutral-300 dark:bg-neutral-700 rounded-t"
-                      style={{ height: `${(t.onceki / trendMax) * 100}%` }}
-                      title={`${t.ay} ${ONCEKI_YIL}: ${kgFmt(t.onceki)}`}
-                    />
-                  </div>
-                  <div className="text-[11px] text-neutral-500">{t.ay.slice(0, 3)}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <Kart baslik="📈 Aylık Satış Trendi">
+            <AylikTrendGrafik
+              aylar={secilenAylar}
+              cari={yoy.map((r) => r.kgCari)}
+              onceki={yoy.map((r) => r.kgOnceki)}
+              gunlukOrt={trend.map((t) => t.ort)}
+              cariYil={CARI_YIL}
+              oncekiYil={ONCEKI_YIL}
+            />
+          </Kart>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="font-medium text-sm">Bölge Dağılımı</div>
-                <Link href="/bolge-analizi" className="text-xs text-neutral-500 hover:underline">
-                  tümünü gör →
-                </Link>
-              </div>
-              <div className="space-y-2.5">
-                {bolgeler.map((b) => (
-                  <div key={b.anahtar} className="flex items-center gap-3 text-sm">
-                    <div className="w-20 shrink-0 text-neutral-600 dark:text-neutral-400">{b.anahtar}</div>
-                    <div className="flex-1 h-2 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
-                      <div
-                        className="h-full bg-neutral-900 dark:bg-neutral-100 rounded-full"
-                        style={{ width: `${b.yuzdePay}%` }}
-                      />
-                    </div>
-                    <div className="w-24 shrink-0 text-right text-neutral-500">{kgFmt(b.toplamKg)}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="font-medium text-sm">Segment Dağılımı</div>
+            <Kart baslik="Merkez vs Franchise (aylık kg)">
+              <MerkezFranchiseGrafik
+                aylar={secilenAylar}
+                merkez={trendMs.map((t) => t.kg)}
+                franchise={trendFr.map((t) => t.kg)}
+              />
+            </Kart>
+            <Kart
+              baslik="Segment Dağılımı (kümülatif)"
+              sagUst={
                 <Link href="/segmentasyon" className="text-xs text-neutral-500 hover:underline">
                   tümünü gör →
                 </Link>
-              </div>
-              <div className="flex h-3 rounded-full overflow-hidden mb-3">
-                {segmentListe.map((s) => (
-                  <div
-                    key={s.esik.ad}
-                    style={{ width: `${(s.adet / segmentToplam) * 100}%`, backgroundColor: s.esik.renk }}
-                    title={`${s.esik.ad}: ${s.adet} şube`}
-                  />
-                ))}
-              </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-                {segmentListe.map((s) => (
-                  <div key={s.esik.ad} className="flex items-center gap-2 text-sm">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: s.esik.renk }}
-                    />
-                    <span className="text-neutral-600 dark:text-neutral-400">{s.esik.ad}</span>
-                    <span className="ml-auto text-neutral-500">{s.adet}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+              }
+            >
+              <SegmentDonut
+                etiketler={segmentListe.map((s) => s.esik.ad)}
+                adetler={segmentListe.map((s) => s.adet)}
+                renkler={segmentListe.map((s) => s.esik.renk)}
+              />
+            </Kart>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
-                <div className="font-medium text-sm">En Yüksek Satış (İlk 10)</div>
+            <Kart
+              baslik="Bölgelere Göre Satış (kg)"
+              sagUst={
+                <Link href="/bolge-analizi" className="text-xs text-neutral-500 hover:underline">
+                  tümünü gör →
+                </Link>
+              }
+            >
+              <YatayCubukGrafik
+                etiketler={bolgeler.map((b) => b.anahtar)}
+                degerler={bolgeler.map((b) => b.toplamKg)}
+                yukseklik={Math.max(240, bolgeler.length * 34)}
+              />
+            </Kart>
+            <Kart
+              baslik="En Çok Satan 10 Şube"
+              sagUst={
                 <Link href="/top30" className="text-xs text-neutral-500 hover:underline">
                   top 30 →
                 </Link>
-              </div>
-              {top10.map((r, i) => (
-                <div
-                  key={r.sube.id}
-                  className="px-4 py-2 text-sm flex items-center justify-between border-b border-neutral-50 dark:border-neutral-800/50 last:border-0"
-                >
-                  <span>
-                    <span className="text-neutral-400 mr-2">{i + 1}</span>
-                    {r.sube.ad} <span className="text-neutral-400 text-xs">({r.sube.bolge})</span>
-                  </span>
-                  <span className="text-neutral-600 dark:text-neutral-400">{kgFmt(r.kg)}</span>
-                </div>
-              ))}
-              {!top10.length && <div className="px-4 py-6 text-sm text-neutral-400">Veri yok.</div>}
-            </div>
+              }
+            >
+              <YatayCubukGrafik
+                etiketler={top10.map((r) => r.sube.ad)}
+                degerler={top10.map((r) => r.kg)}
+                renk="#2563eb"
+                yukseklik={340}
+              />
+            </Kart>
+          </div>
 
-            <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
-                <div className="font-medium text-sm">
-                  {CARI_YIL} vs {ONCEKI_YIL}
-                </div>
-                <Link href="/yoy-karsilastirma" className="text-xs text-neutral-500 hover:underline">
-                  detay →
-                </Link>
-              </div>
+          <Kart
+            baslik={`📅 ${CARI_YIL} vs ${ONCEKI_YIL} — Yıl İçi Karşılaştırması`}
+            sagUst={
+              <Link href="/yoy-karsilastirma" className="text-xs text-neutral-500 hover:underline">
+                detay →
+              </Link>
+            }
+          >
+            <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-left text-xs text-neutral-500">
                   <tr>
-                    <th className="px-4 py-1.5">Ay</th>
-                    <th className="px-4 py-1.5 text-right">{CARI_YIL}</th>
-                    <th className="px-4 py-1.5 text-right">{ONCEKI_YIL}</th>
-                    <th className="px-4 py-1.5 text-right">Fark</th>
+                    <th className="px-3 py-2">Ay</th>
+                    <th className="px-3 py-2 text-right">{CARI_YIL} (kg)</th>
+                    <th className="px-3 py-2 text-right">{ONCEKI_YIL} (kg)</th>
+                    <th className="px-3 py-2 text-right">Fark (kg)</th>
+                    <th className="px-3 py-2 text-right">YoY %</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {aylikTrend.map((t) => {
-                    const fark = t.cari - t.onceki;
-                    return (
-                      <tr key={t.ay} className="border-t border-neutral-50 dark:border-neutral-800/50">
-                        <td className="px-4 py-1.5 font-medium">{t.ay}</td>
-                        <td className="px-4 py-1.5 text-right">{kgFmt(t.cari)}</td>
-                        <td className="px-4 py-1.5 text-right text-neutral-500">{kgFmt(t.onceki)}</td>
-                        <td
-                          className={`px-4 py-1.5 text-right ${fark >= 0 ? "text-emerald-600" : "text-red-600"}`}
-                        >
-                          {kgFmt(fark)}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {yoy
+                    .filter((r) => r.kgCari > 0)
+                    .map((r) => {
+                      const fark = r.kgCari - r.kgOnceki;
+                      return (
+                        <tr key={r.ay} className="border-t border-neutral-100 dark:border-neutral-800">
+                          <td className="px-3 py-1.5 font-semibold text-xs">{r.ay}</td>
+                          <td className="px-3 py-1.5 text-right font-bold">{fmt(r.kgCari)}</td>
+                          <td className="px-3 py-1.5 text-right text-neutral-500">{fmt(r.kgOnceki)}</td>
+                          <td
+                            className={`px-3 py-1.5 text-right font-semibold ${fark >= 0 ? "text-emerald-600" : "text-red-500"}`}
+                          >
+                            {fark >= 0 ? "+" : ""}
+                            {fmt(fark)}
+                          </td>
+                          <td className="px-3 py-1.5 text-right">
+                            <Degisim oran={r.degisim} />
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-neutral-200 dark:border-neutral-700 font-bold bg-neutral-50 dark:bg-neutral-800/50">
+                    <td className="px-3 py-2 text-xs">TOPLAM</td>
+                    <td className="px-3 py-2 text-right">{fmt(yoyKgCari)}</td>
+                    <td className="px-3 py-2 text-right text-neutral-500">{fmt(yoyKgOnceki)}</td>
+                    <td
+                      className={`px-3 py-2 text-right ${yoyKgCari - yoyKgOnceki >= 0 ? "text-emerald-600" : "text-red-500"}`}
+                    >
+                      {yoyKgCari - yoyKgOnceki >= 0 ? "+" : ""}
+                      {fmt(yoyKgCari - yoyKgOnceki)}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <Degisim oran={yoyDegisim} />
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
-          </div>
+          </Kart>
         </>
       )}
     </div>

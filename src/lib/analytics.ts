@@ -302,6 +302,141 @@ export function periyotOzetKarsilastir(
   return { a, b, farkKg, farkYuzde };
 }
 
+// ─── Genel Bakış hesapları ───────────────────────────────────────────────
+// Eski panelin ayOzet/kumulatifOzet fonksiyonlarının birebir karşılığı.
+// Dikkat: buradaki "ort" ŞUBE BAŞINA günlük ortalamadır — kg / (gün × açık şube) —
+// subeKgOzetleri'ndeki şube bazlı kgGunluk ile aynı şey değildir.
+
+export interface AyOzet {
+  ay: string;
+  kg: number;
+  /** O ay veri girilmiş (açık) şube sayısı — 0 kg da açık sayılır. */
+  acik: number;
+  gun: number;
+  /** Şube başına günlük ortalama: kg / (gün × açık şube). */
+  ort: number;
+}
+
+/** Seçili ayların her biri için şirket toplamı (tip: "MS" | "FR" | null=tümü). */
+export function aylikTrendHesapla(
+  subeler: Sube[],
+  satislar: AylikSatis[],
+  yil: number,
+  aylar: string[],
+  gunMap: Map<string, number>,
+  tip: "MS" | "FR" | null = null,
+): AyOzet[] {
+  const kapsam = tip ? subeler.filter((s) => s.tip === tip) : subeler;
+  const idSet = new Set(kapsam.map((s) => s.id));
+
+  const ayaGore = new Map<string, { kg: number; acik: number }>();
+  for (const ay of aylar) ayaGore.set(ay, { kg: 0, acik: 0 });
+
+  for (const s of satislar) {
+    if (s.yil !== yil) continue;
+    if (!idSet.has(s.sube_id)) continue;
+    const g = ayaGore.get(s.ay);
+    if (!g) continue;
+    g.kg += Number(s.kg) || 0;
+    g.acik++;
+  }
+
+  return aylar.map((ay) => {
+    const g = ayaGore.get(ay)!;
+    const gun = gunMap.get(`${yil}-${ay}`) ?? 30;
+    return { ay, kg: g.kg, acik: g.acik, gun, ort: g.acik ? g.kg / (gun * g.acik) : 0 };
+  });
+}
+
+export interface KumulatifOzet {
+  kg: number;
+  gun: number;
+  ortAcik: number;
+  ort: number;
+  aktifSube: number;
+  toplamSube: number;
+}
+
+/** Trend dizisinden kümülatif şirket özeti üretir. */
+export function kumulatifOzetHesapla(
+  subeler: Sube[],
+  trend: AyOzet[],
+  tip: "MS" | "FR" | null = null,
+): KumulatifOzet {
+  const kapsam = tip ? subeler.filter((s) => s.tip === tip) : subeler;
+  const kg = trend.reduce((t, x) => t + x.kg, 0);
+  const gun = trend.reduce((t, x) => t + x.gun, 0);
+  const ortAcik = trend.length ? trend.reduce((t, x) => t + x.acik, 0) / trend.length : 0;
+
+  return {
+    kg,
+    gun,
+    ortAcik,
+    ort: gun && ortAcik ? kg / (gun * ortAcik) : 0,
+    aktifSube: kapsam.filter((s) => s.aktif).length,
+    toplamSube: kapsam.length,
+  };
+}
+
+export interface YoYAySatiri {
+  ay: string;
+  kgCari: number;
+  kgOnceki: number;
+  degisim: number | null;
+}
+
+/** Her ay için cari yıl ve önceki yıl toplamları + yüzde değişim. */
+export function aylikYoYHesapla(
+  subeler: Sube[],
+  satislar: AylikSatis[],
+  cariYil: number,
+  oncekiYil: number,
+  aylar: string[],
+): YoYAySatiri[] {
+  const idSet = new Set(subeler.map((s) => s.id));
+  const cari = new Map<string, number>();
+  const onceki = new Map<string, number>();
+  for (const ay of aylar) {
+    cari.set(ay, 0);
+    onceki.set(ay, 0);
+  }
+
+  for (const s of satislar) {
+    if (!idSet.has(s.sube_id)) continue;
+    const hedef = s.yil === cariYil ? cari : s.yil === oncekiYil ? onceki : null;
+    if (!hedef || !hedef.has(s.ay)) continue;
+    hedef.set(s.ay, hedef.get(s.ay)! + (Number(s.kg) || 0));
+  }
+
+  return aylar.map((ay) => {
+    const kgCari = cari.get(ay) ?? 0;
+    const kgOnceki = onceki.get(ay) ?? 0;
+    return {
+      ay,
+      kgCari,
+      kgOnceki,
+      degisim: kgOnceki > 0 ? (kgCari - kgOnceki) / kgOnceki : null,
+    };
+  });
+}
+
+/** Seçili aylarda önceki yıla ait verisi olan (o dönem açık olan) şube sayısı. */
+export function acikSubeSayisi(
+  subeler: Sube[],
+  satislar: AylikSatis[],
+  yil: number,
+  aylar: string[],
+): number {
+  const aySet = new Set(aylar);
+  const idSet = new Set(subeler.map((s) => s.id));
+  const bulunan = new Set<string>();
+  for (const s of satislar) {
+    if (s.yil !== yil || !aySet.has(s.ay) || !idSet.has(s.sube_id)) continue;
+    bulunan.add(s.sube_id);
+  }
+  return bulunan.size;
+}
+
 export function yuzdeFmt(n: number): string {
   const isaret = n > 0 ? "+" : "";
   return `${isaret}${n.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}%`;
