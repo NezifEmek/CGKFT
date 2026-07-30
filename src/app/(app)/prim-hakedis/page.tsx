@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { primAyarlariNormalize } from "@/lib/dokuman";
 import { aySirala } from "@/lib/analytics";
+import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import { PrimArayuz, type AyOgesi } from "./prim-arayuz";
 
@@ -9,9 +10,14 @@ export default async function PrimHakedisSayfasi() {
   const profile = await requireProfile();
   const supabase = await createClient();
 
-  const [{ data: subeler }, { data: satislar }, { data: aylar }, ayarSonuc] = await Promise.all([
+  const [{ data: subeler }, satislar, { data: aylar }, ayarSonuc] = await Promise.all([
     supabase.from("subeler").select("*").returns<Sube[]>(),
-    supabase.from("aylik_satislar").select("*").returns<AylikSatis[]>(),
+    // Sayfalama şart: aylik_satislar 1000 satırı aşıyor ve PostgREST tek
+    // istekte en fazla 1000 satır döndürüyor. Bu atlandığında fiili kg'lar
+    // eksik geliyordu (HAZİRAN 2026: 48.247 yerine 19.403).
+    tumSatirlariGetir<AylikSatis>((from, to) =>
+      supabase.from("aylik_satislar").select("*").range(from, to),
+    ),
     supabase.from("aylar").select("*").returns<Ay[]>(),
     supabase
       .from("dokuman_ayarlari")
@@ -55,7 +61,7 @@ export default async function PrimHakedisSayfasi() {
       {ayListesi.length ? (
         <PrimArayuz
           subeler={subeler ?? []}
-          satislar={satislar ?? []}
+          satislar={satislar}
           aylar={ayListesi}
           ayarlar={ayarlar}
           duzenlenebilir={duzenlenebilir}

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import type { Sube } from "@/types/database";
+import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { GunlukKayit, Kalem } from "@/lib/merkez-gg";
 import { GGArayuz, type GGSube } from "./gg-arayuz";
 
@@ -8,14 +9,28 @@ export default async function MerkezGelirGiderSayfasi() {
   const profile = await requireProfile();
   const supabase = await createClient();
 
-  const [{ data: subeler }, gunSonuc, kalemSonuc] = await Promise.all([
+  // Sayfalama şart: günlük defter 25 merkez şube × 365 gün ile tek yılda bile
+  // 1000 satırı aşar; PostgREST tek istekte en fazla 1000 satır döndürür.
+  let tabloYok = false;
+  const [{ data: subeler }, gunHam, kalemHam] = await Promise.all([
     supabase.from("subeler").select("*").eq("tip", "MS").order("ad").returns<Sube[]>(),
-    supabase.from("merkez_gg_gunluk").select("*").order("tarih", { ascending: false }),
-    supabase.from("merkez_gg_kalem").select("*"),
+    tumSatirlariGetir<GunlukKayit>((from, to) =>
+      supabase
+        .from("merkez_gg_gunluk")
+        .select("*")
+        .order("tarih", { ascending: false })
+        .range(from, to),
+    ).catch(() => {
+      tabloYok = true;
+      return [] as GunlukKayit[];
+    }),
+    tumSatirlariGetir<Kalem>((from, to) =>
+      supabase.from("merkez_gg_kalem").select("*").range(from, to),
+    ).catch(() => {
+      tabloYok = true;
+      return [] as Kalem[];
+    }),
   ]);
-
-  // Tablolar henüz oluşturulmadıysa ekran çökmesin.
-  const tabloYok = Boolean(gunSonuc.error || kalemSonuc.error);
 
   const ggSubeler: GGSube[] = (subeler ?? []).map((s) => ({
     id: s.id,
@@ -23,7 +38,7 @@ export default async function MerkezGelirGiderSayfasi() {
     il: s.il ?? "",
   }));
 
-  const gunler = ((gunSonuc.data ?? []) as GunlukKayit[]).map((g) => ({
+  const gunler = gunHam.map((g) => ({
     ...g,
     nakit: Number(g.nakit) || 0,
     kredi_karti: Number(g.kredi_karti) || 0,
@@ -34,7 +49,7 @@ export default async function MerkezGelirGiderSayfasi() {
     genel_masraf: Number(g.genel_masraf) || 0,
   }));
 
-  const kalemler = ((kalemSonuc.data ?? []) as Kalem[]).map((k) => ({
+  const kalemler = kalemHam.map((k) => ({
     ...k,
     adet: Number(k.adet) || 0,
     tutar: Number(k.tutar) || 0,

@@ -3,6 +3,7 @@ import { requireProfile } from "@/lib/auth";
 import { primAyarlariNormalize } from "@/lib/dokuman";
 import { primHesapla } from "@/lib/prim";
 import { aySirala } from "@/lib/analytics";
+import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import { PrimProjeksiyonGrafik } from "@/components/grafikler";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 
@@ -14,9 +15,12 @@ export default async function PrimProjeksiyonSayfasi() {
   await requireProfile();
   const supabase = await createClient();
 
-  const [{ data: subeler }, { data: satislar }, { data: aylar }, ayarSonuc] = await Promise.all([
+  const [{ data: subeler }, satislar, { data: aylar }, ayarSonuc] = await Promise.all([
     supabase.from("subeler").select("*").returns<Sube[]>(),
-    supabase.from("aylik_satislar").select("*").returns<AylikSatis[]>(),
+    // Sayfalama şart — bkz. prim-hakedis: tek istekte en fazla 1000 satır gelir.
+    tumSatirlariGetir<AylikSatis>((from, to) =>
+      supabase.from("aylik_satislar").select("*").range(from, to),
+    ),
     supabase.from("aylar").select("*").returns<Ay[]>(),
     supabase
       .from("dokuman_ayarlari")
@@ -44,7 +48,7 @@ export default async function PrimProjeksiyonSayfasi() {
   }
 
   const satirlar = ayListesi.map(({ yil, ay }) => {
-    const h = primHesapla(subeler ?? [], satislar ?? [], yil, ay, ayarlar);
+    const h = primHesapla(subeler ?? [], satislar, yil, ay, ayarlar);
     const havuzToplam =
       h.uretimHavuz + h.merkezHavuz + h.bolge1Havuz + h.bolge2Havuz + h.merkezSoruHavuz;
     return { yil, ay, h, havuzToplam };
