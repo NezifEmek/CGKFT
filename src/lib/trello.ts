@@ -84,6 +84,10 @@ export interface TrelloTanilama {
   /** Anahtarın ilk/son birkaç karakteri — yanlış değişkene yapıştırıldıysa fark edilsin. */
   anahtarIpucu: string;
   tokenUzunluk: number;
+  /** Token'ın yalnızca ilk 4 karakteri — biçimi anlamak için (ATTA… yeni nesil). */
+  tokenOnEk: string;
+  /** Değerin başında/sonunda boşluk veya satır sonu var mı? */
+  tokenBosluklu: boolean;
   /** Ortamda TRELLO ile başlayan bütün değişken adları (değerler DEĞİL). */
   bulunanAdlar: string[];
 }
@@ -102,6 +106,8 @@ export function trelloTanila(): TrelloTanilama {
     tokenVar: Boolean(token),
     anahtarIpucu: key ? `${key.slice(0, 4)}…${key.slice(-2)} (${key.length} karakter)` : "",
     tokenUzunluk: token.length,
+    tokenOnEk: token.slice(0, 4),
+    tokenBosluklu: token !== token.trim(),
     bulunanAdlar: Object.keys(process.env)
       .filter((k) => k.toUpperCase().includes("TRELLO"))
       .sort(),

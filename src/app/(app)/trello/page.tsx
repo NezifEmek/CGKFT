@@ -106,16 +106,30 @@ export default async function TrelloSayfasi() {
               <code className="text-xs">TRELLO_API_KEY</code>: {t.anahtarIpucu || "yok"}
             </li>
             <li>
-              <code className="text-xs">TRELLO_TOKEN</code>: {t.tokenUzunluk} karakter{" "}
-              {t.tokenUzunluk === 64 ? (
+              <code className="text-xs">TRELLO_TOKEN</code>: {t.tokenUzunluk} karakter, &quot;
+              {t.tokenOnEk}…&quot; ile başlıyor
+            </li>
+            <li>
+              {t.tokenBosluklu ? (
+                <span className="font-semibold">
+                  ⚠ Değerin başında veya sonunda boşluk/satır sonu var — kopyalama sırasında
+                  fazladan karakter gelmiş.
+                </span>
+              ) : t.tokenOnEk.toUpperCase().startsWith("ATTA") ? (
+                <>
+                  Biçim yeni nesil Trello token&apos;ı (ATTA…) — uzunluk normal.{" "}
+                  <b>
+                    Sorun uzunlukta değil: bu token, TRELLO_API_KEY&apos;deki anahtar için
+                    üretilmemiş.
+                  </b>{" "}
+                  Aşağıdaki bağlantı doğru anahtara bağlı token üretir.
+                </>
+              ) : t.tokenUzunluk === 64 ? (
                 <span className="text-emerald-700 dark:text-emerald-400">
-                  (beklenen uzunluk ✓)
+                  Uzunluk klasik biçimle uyumlu.
                 </span>
               ) : (
-                <span className="font-semibold">
-                  — Trello token&apos;ları normalde <b>64</b> karakterdir, bu değer beklenenden
-                  farklı
-                </span>
+                <>Biçim tanınmadı; token&apos;ın doğru anahtarla yeniden üretilmesi gerekiyor.</>
               )}
             </li>
           </ul>
