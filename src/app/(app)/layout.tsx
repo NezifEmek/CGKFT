@@ -31,6 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       : []),
     { href: "/ice-disa-aktar", etiket: "📥 İçe / Dışa Aktar" },
     { href: "/dokuman", etiket: "📄 Doküman Yönetimi" },
+    { href: "/organizasyon", etiket: "🏛️ Organizasyon Şeması" },
     { href: "/trello", etiket: "🗂️ Trello" },
     ...(profile.rol !== "denetmen"
       ? [
