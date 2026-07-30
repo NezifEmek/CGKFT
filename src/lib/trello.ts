@@ -78,6 +78,36 @@ export function trelloYapilandirildiMi(): boolean {
   return Boolean(process.env.TRELLO_API_KEY && process.env.TRELLO_TOKEN);
 }
 
+export interface TrelloTanilama {
+  anahtarVar: boolean;
+  tokenVar: boolean;
+  /** Anahtarın ilk/son birkaç karakteri — yanlış değişkene yapıştırıldıysa fark edilsin. */
+  anahtarIpucu: string;
+  tokenUzunluk: number;
+  /** Ortamda TRELLO ile başlayan bütün değişken adları (değerler DEĞİL). */
+  bulunanAdlar: string[];
+}
+
+/**
+ * Hangi değişkenin eksik olduğunu söyler. Değer basmaz; yalnızca varlık,
+ * uzunluk ve maskelenmiş ipucu. Amaç: "kurulmamış" demek yerine kullanıcıya
+ * neyin yanlış olduğunu göstermek (ör. anahtar Vercel'de ad alanına
+ * yapıştırıldığında TRELLO_API_KEY hiç oluşmuyor).
+ */
+export function trelloTanila(): TrelloTanilama {
+  const key = process.env.TRELLO_API_KEY ?? "";
+  const token = process.env.TRELLO_TOKEN ?? "";
+  return {
+    anahtarVar: Boolean(key),
+    tokenVar: Boolean(token),
+    anahtarIpucu: key ? `${key.slice(0, 4)}…${key.slice(-2)} (${key.length} karakter)` : "",
+    tokenUzunluk: token.length,
+    bulunanAdlar: Object.keys(process.env)
+      .filter((k) => k.toUpperCase().includes("TRELLO"))
+      .sort(),
+  };
+}
+
 export class TrelloHatasi extends Error {
   constructor(
     message: string,

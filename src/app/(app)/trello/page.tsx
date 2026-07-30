@@ -6,6 +6,7 @@ import {
   panolariSirala,
   oncelikliMi,
   trelloYapilandirildiMi,
+  trelloTanila,
   TrelloHatasi,
   type TrelloPano,
 } from "@/lib/trello";
@@ -23,19 +24,61 @@ export default async function TrelloSayfasi() {
   await requireProfile();
 
   if (!trelloYapilandirildiMi()) {
+    const t = trelloTanila();
     return (
       <div className="space-y-4">
         <h1 className="text-xl font-semibold">Trello</h1>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300 space-y-2">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300 space-y-3">
           <p>
-            <b>Trello bağlantısı henüz kurulmamış.</b>
+            <b>Trello bağlantısı kurulamadı.</b> Aşağıdaki tanı, hangi değişkenin eksik olduğunu
+            gösteriyor — değerler gösterilmez.
           </p>
-          <p>
-            Bu ekranın çalışması için <code className="text-xs">TRELLO_API_KEY</code> ve{" "}
-            <code className="text-xs">TRELLO_TOKEN</code> ortam değişkenlerinin tanımlı olması
-            gerekiyor. Token yalnızca okuma yetkisiyle üretilmelidir — panel Trello&apos;da hiçbir
-            şeyi değiştirmez.
-          </p>
+
+          <ul className="space-y-1 text-[13px]">
+            <li>
+              <code className="text-xs">TRELLO_API_KEY</code>:{" "}
+              {t.anahtarVar ? (
+                <span className="text-emerald-700 dark:text-emerald-400">
+                  var · {t.anahtarIpucu}
+                </span>
+              ) : (
+                <span className="text-red-700 dark:text-red-400 font-semibold">YOK</span>
+              )}
+            </li>
+            <li>
+              <code className="text-xs">TRELLO_TOKEN</code>:{" "}
+              {t.tokenVar ? (
+                <span className="text-emerald-700 dark:text-emerald-400">
+                  var · {t.tokenUzunluk} karakter
+                </span>
+              ) : (
+                <span className="text-red-700 dark:text-red-400 font-semibold">YOK</span>
+              )}
+            </li>
+            <li>
+              Ortamda &quot;TRELLO&quot; içeren değişken adları:{" "}
+              {t.bulunanAdlar.length ? (
+                <code className="text-xs">{t.bulunanAdlar.join(", ")}</code>
+              ) : (
+                <span className="text-red-700 dark:text-red-400">hiç yok</span>
+              )}
+            </li>
+          </ul>
+
+          <div className="text-[13px] space-y-1 pt-1 border-t border-amber-200 dark:border-amber-900">
+            <p className="font-semibold">Nasıl düzeltilir</p>
+            <p>
+              Vercel → Settings → Environment Variables. Değişkenin <b>adı</b>{" "}
+              <code className="text-xs">TRELLO_API_KEY</code>, <b>değeri</b> ise Trello&apos;dan
+              aldığınız anahtar olmalı. Anahtar yanlışlıkla <b>ad</b> alanına yapıştırılmışsa
+              yukarıdaki listede uzun bir karakter dizisi görünür — o satırı silip doğrusunu
+              ekleyin.
+            </p>
+            <p>
+              Değişkenleri ekledikten sonra <b>Deployments → ⋯ → Redeploy</b> yapmayı unutmayın;
+              Vercel ortam değişkenlerini mevcut dağıtıma sonradan uygulamıyor.
+            </p>
+          </div>
         </div>
       </div>
     );
