@@ -429,3 +429,89 @@ export function YatayCubukGrafik({
 
   return <Tuval config={config} yukseklik={yukseklik} />;
 }
+
+/**
+ * Prim projeksiyonu: aylık toplam prim havuzu (sütun, TL) + hedef aşımı
+ * (çizgi, kg). Eski paneldeki primproj.js grafiğinin karşılığı.
+ */
+export function PrimProjeksiyonGrafik({
+  aylar,
+  havuz,
+  asim,
+  yukseklik = 320,
+}: {
+  aylar: string[];
+  havuz: number[];
+  asim: number[];
+  yukseklik?: number;
+}) {
+  const config: ChartConfiguration = {
+    type: "bar",
+    data: {
+      labels: aylar,
+      datasets: [
+        {
+          type: "line",
+          label: "Hedef aşımı (kg)",
+          data: asim,
+          borderColor: "#16a34a",
+          backgroundColor: "rgba(22,163,74,0.10)",
+          pointBackgroundColor: "#fff",
+          pointBorderColor: "#16a34a",
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          borderWidth: 2,
+          tension: 0.35,
+          fill: true,
+          yAxisID: "y2",
+          order: 0,
+        },
+        {
+          type: "bar",
+          label: "Toplam prim havuzu (TL)",
+          data: havuz,
+          backgroundColor: RENK.ana,
+          borderRadius: 3,
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { position: "top", labels: { color: RENK.metin, boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const d = Math.round(Number(ctx.parsed.y) || 0);
+              return ctx.dataset.yAxisID === "y2"
+                ? `${ctx.dataset.label}: ${sayiFmt.format(d)} kg`
+                : `${ctx.dataset.label}: ${sayiFmt.format(d)} TL`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: ORTAK_EKSEN,
+        y: {
+          ...ORTAK_EKSEN,
+          position: "left",
+          title: { display: true, text: "TL", color: RENK.metin, font: { size: 11 } },
+          ticks: { ...ORTAK_EKSEN.ticks, callback: (v) => sayiFmt.format(Number(v)) },
+        },
+        y2: {
+          position: "right",
+          grid: { drawOnChartArea: false },
+          border: { display: false },
+          title: { display: true, text: "kg", color: RENK.metin, font: { size: 11 } },
+          ticks: { color: RENK.metin, font: { size: 11 } },
+        },
+      },
+    },
+  };
+
+  return <Tuval config={config} yukseklik={yukseklik} />;
+}
