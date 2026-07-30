@@ -26,6 +26,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: "/hizli-skor", etiket: "⚡ Hızlı Skor Girişi" },
     { href: "/bolge-analizi", etiket: "🗺️ Bölge Analizi" },
     { href: "/ciro-karlilik", etiket: "💰 Ciro & Kârlılık" },
+    ...(profile.rol !== "denetmen"
+      ? [{ href: "/merkez-gelir-gider", etiket: "💹 Merkez Şube Gelir-Gider" }]
+      : []),
     { href: "/ice-disa-aktar", etiket: "📥 İçe / Dışa Aktar" },
     { href: "/dokuman", etiket: "📄 Doküman Yönetimi" },
     { href: "/trello", etiket: "🗂️ Trello" },

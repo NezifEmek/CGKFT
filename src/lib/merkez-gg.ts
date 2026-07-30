@@ -1,0 +1,294 @@
+// merkez-gg.ts — Merkez Şube Gelir-Gider: hesap kuralları ve Excel çözümleyici.
+//
+// Kurallar eski panelin analytics.js → merkezGGSubeAylik fonksiyonundan birebir
+// alındı. Dikkat çeken nokta: "ayran" GELİR, "yemek" GİDER sayılır (personel
+// yemeği). Aylık stok/gider kalemlerinin tamamı gidere eklenir.
+
+export const AYLAR_12 = [
+  "OCAK",
+  "ŞUBAT",
+  "MART",
+  "NİSAN",
+  "MAYIS",
+  "HAZİRAN",
+  "TEMMUZ",
+  "AĞUSTOS",
+  "EYLÜL",
+  "EKİM",
+  "KASIM",
+  "ARALIK",
+] as const;
+
+export const GELIR_ALANLARI = [
+  { key: "nakit", etiket: "Nakit" },
+  { key: "kredi_karti", etiket: "Kredi Kartı" },
+  { key: "ticket", etiket: "Ticket" },
+  { key: "yemek_sepeti", etiket: "Yemek Sepeti" },
+  { key: "ayran", etiket: "Ayran" },
+] as const;
+
+export const GIDER_ALANLARI = [
+  { key: "yemek", etiket: "Yemek (personel)" },
+  { key: "genel_masraf", etiket: "Genel Masraf" },
+] as const;
+
+export interface GunlukKayit {
+  id?: string;
+  sube_id: string;
+  tarih: string; // YYYY-MM-DD
+  nakit: number;
+  kredi_karti: number;
+  ticket: number;
+  yemek_sepeti: number;
+  ayran: number;
+  yemek: number;
+  genel_masraf: number;
+  kaynak?: "elle" | "excel";
+}
+
+export interface Kalem {
+  id?: string;
+  sube_id: string;
+  yil: number;
+  ay: string;
+  urun: string;
+  adet: number;
+  tutar: number;
+  kaynak?: "elle" | "excel";
+}
+
+export function gunlukGelir(g: GunlukKayit): number {
+  return (
+    (g.nakit || 0) +
+    (g.kredi_karti || 0) +
+    (g.ticket || 0) +
+    (g.yemek_sepeti || 0) +
+    (g.ayran || 0)
+  );
+}
+
+export function gunlukGider(g: GunlukKayit): number {
+  return (g.yemek || 0) + (g.genel_masraf || 0);
+}
+
+export interface GGOzet {
+  gelir: number;
+  gider: number;
+  net: number;
+  gunSayisi: number;
+  kalemGideri: number;
+}
+
+/** Verilen günlük kayıt ve kalem kümesi için gelir/gider/net. */
+export function ggOzetle(gunler: GunlukKayit[], kalemler: Kalem[]): GGOzet {
+  let gelir = 0;
+  let gider = 0;
+  for (const g of gunler) {
+    gelir += gunlukGelir(g);
+    gider += gunlukGider(g);
+  }
+  const kalemGideri = kalemler.reduce((t, k) => t + (k.tutar || 0), 0);
+  gider += kalemGideri;
+  return { gelir, gider, net: gelir - gider, gunSayisi: gunler.length, kalemGideri };
+}
+
+export function ayAdi(tarih: string): string {
+  const d = new Date(tarih + "T00:00:00");
+  return AYLAR_12[d.getMonth()];
+}
+
+export function yilAl(tarih: string): number {
+  return Number(tarih.slice(0, 4));
+}
+
+// ─── Excel çözümleme (tarayıcıda çalışır) ───────────────────────────────────
+
+/** "1.234,56" / "1,234.56" / sayı → sayı. Eski excel.js sayiOku karşılığı. */
+export function sayiOku(v: unknown): number {
+  if (v === null || v === undefined || v === "") return 0;
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  let s = String(v).replace(/\s|₺|TL/gi, "");
+
+  if (s.includes(",") && s.includes(".")) {
+    // İkisi birlikteyse ondalık ayırıcı sonda olandır: "1.234,56" / "1,234.56"
+    s =
+      s.lastIndexOf(",") > s.lastIndexOf(".")
+        ? s.replace(/\./g, "").replace(",", ".")
+        : s.replace(/,/g, "");
+  } else if (s.includes(",")) {
+    s = s.replace(",", ".");
+  } else if (s.includes(".")) {
+    // Yalnızca nokta var ve belirsiz: "1.200" Türkçe'de 1200, İngilizce'de 1,2.
+    // Türkçe kaynaklı dosyalarla çalıştığımız için binlik kalıbını (her nokta
+    // grubu tam 3 hane) binlik ayırıcı kabul ediyoruz; "1.20" veya "1.2345"
+    // gibi kalıplar ondalık sayılır. Bu düzeltilmeden "1.200 TL" 1,2 okunuyordu.
+    if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
+  }
+
+  const n = Number(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Excel hücresini YYYY-MM-DD'ye çevirir; olmuyorsa null. */
+export function tarihCevir(v: unknown): string | null {
+  if (v === null || v === undefined || v === "") return null;
+
+  // Excel seri numarası (1900 tarih sistemi)
+  if (typeof v === "number" && v > 20000 && v < 60000) {
+    const ms = Math.round((v - 25569) * 86400 * 1000);
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  }
+
+  if (v instanceof Date) {
+    return Number.isNaN(v.getTime()) ? null : v.toISOString().slice(0, 10);
+  }
+
+  const s = String(v).trim();
+  // 01.05.2026 / 01/05/2026 / 1-5-2026
+  const m = s.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})$/);
+  if (m) {
+    const gun = Number(m[1]);
+    const ayNo = Number(m[2]);
+    let yil = Number(m[3]);
+    if (yil < 100) yil += 2000;
+    if (gun < 1 || gun > 31 || ayNo < 1 || ayNo > 12) return null;
+    return `${yil}-${String(ayNo).padStart(2, "0")}-${String(gun).padStart(2, "0")}`;
+  }
+  // 2026-05-01
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return null;
+}
+
+/** Sayfa adından ay tahmini (ör. "DARICA MAYIS" → MAYIS). */
+export function sayfaAyBul(sayfaAdi: string): string | null {
+  const u = sayfaAdi.replace(/i/g, "İ").toUpperCase();
+  return AYLAR_12.find((a) => u.includes(a)) ?? null;
+}
+
+/** Sayfa adından şube tahmini: adı sayfa adının içinde geçen merkez şube. */
+export function sayfaSubeTahmin(
+  sayfaAdi: string,
+  subeler: { id: string; ad: string; tip: string }[],
+): string | null {
+  const u = sayfaAdi.replace(/i/g, "İ").toUpperCase();
+  const adaylar = subeler
+    .filter((s) => s.tip === "MS")
+    .map((s) => ({ id: s.id, ad: s.ad.replace(/i/g, "İ").toUpperCase() }))
+    // Uzun ad önce: "DERİNCE2" ile "DERİNCE" karışmasın.
+    .sort((a, b) => b.ad.length - a.ad.length);
+
+  for (const s of adaylar) {
+    const cekirdek = s.ad.replace(/\s*ŞUBE\s*$/, "").trim();
+    if (cekirdek && u.includes(cekirdek)) return s.id;
+  }
+  return null;
+}
+
+export interface SayfaSonucu {
+  sayfaAdi: string;
+  ay: string | null;
+  subeIdTahmin: string | null;
+  gunluk: Omit<GunlukKayit, "sube_id">[];
+  kalemler: Omit<Kalem, "sube_id" | "yil" | "ay">[];
+}
+
+type Izgara = unknown[][];
+
+/**
+ * Bir sayfayı çözümler. Eski excel.js → merkezGGSayfaAyristir'ın portu:
+ * ilk 3 satırda "NAKİT" + "GENEL TOPLAM" içeren başlık aranır; bulunamazsa
+ * ve 1. hücre tarihse standart kolon sırası (0..8) varsayılır.
+ */
+export function sayfaAyristir(grid: Izgara): {
+  gunluk: Omit<GunlukKayit, "sube_id">[];
+  kalemler: Omit<Kalem, "sube_id" | "yil" | "ay">[];
+} | null {
+  let hRow = -1;
+  let col: Record<string, number> = {};
+
+  for (let r = 0; r < Math.min(grid.length, 3); r++) {
+    const row = (grid[r] ?? []).map((c) => String(c ?? "").replace(/i/g, "İ").toUpperCase().trim());
+    const iNakit = row.findIndex((t) => t.includes("NAKİT") || t.includes("NAKIT"));
+    const iGenel = row.findIndex((t) => t.includes("GENEL TOPLAM"));
+    if (iNakit >= 0 && iGenel >= 0) {
+      hRow = r;
+      col = {
+        nakit: iNakit,
+        kredi_karti: row.findIndex((t) => t.includes("KREDİ") || t.includes("KREDI")),
+        ticket: row.findIndex((t) => t.includes("TICKET") || t.includes("TİCKET")),
+        yemek_sepeti: row.findIndex((t) => t.includes("YEMEK SEPET")),
+        ayran: row.findIndex((t) => t === "AYRAN"),
+        yemek: row.findIndex((t) => t === "YEMEK"),
+        genel_masraf: row.findIndex((t) => t.includes("MASRAF")),
+        genelToplam: iGenel,
+      };
+      break;
+    }
+  }
+
+  if (hRow < 0) {
+    if (tarihCevir(grid[0]?.[0]) !== null) {
+      col = {
+        nakit: 1,
+        kredi_karti: 2,
+        ticket: 3,
+        yemek_sepeti: 4,
+        ayran: 5,
+        yemek: 6,
+        genel_masraf: 7,
+        genelToplam: 8,
+      };
+    } else {
+      return null;
+    }
+  }
+
+  const al = (row: unknown[], c: number) => (c >= 0 ? sayiOku(row[c]) : 0);
+
+  const gunluk: Omit<GunlukKayit, "sube_id">[] = [];
+  for (let r = hRow + 1; r < grid.length; r++) {
+    const row = grid[r] ?? [];
+    const tarih = tarihCevir(row[0]);
+    if (tarih === null) break; // TOPLAM satırı vb. → tablo bitti
+    gunluk.push({
+      tarih,
+      nakit: al(row, col.nakit),
+      kredi_karti: al(row, col.kredi_karti),
+      ticket: al(row, col.ticket),
+      yemek_sepeti: al(row, col.yemek_sepeti),
+      ayran: al(row, col.ayran),
+      yemek: al(row, col.yemek),
+      genel_masraf: al(row, col.genel_masraf),
+    });
+  }
+
+  // Kalem listesi: "STOK HAREKETLERİ" etiketi, genel toplam kolonundan sonra.
+  let kalemBas: { row: number; col: number } | null = null;
+  for (let r = 0; r < grid.length && !kalemBas; r++) {
+    const row = grid[r] ?? [];
+    for (let c = (col.genelToplam ?? 0) + 1; c < row.length; c++) {
+      const t = String(row[c] ?? "").replace(/i/g, "İ").toUpperCase();
+      if (t.includes("STOK HAREKETLERİ") || t.includes("STOK HAREKETLERI")) {
+        kalemBas = { row: r + 1, col: c };
+        break;
+      }
+    }
+  }
+
+  const kalemler: Omit<Kalem, "sube_id" | "yil" | "ay">[] = [];
+  if (kalemBas) {
+    for (let r = kalemBas.row; r < grid.length; r++) {
+      const row = grid[r] ?? [];
+      const urun = row[kalemBas.col];
+      if (urun === null || urun === undefined || String(urun).trim() === "") break;
+      kalemler.push({
+        urun: String(urun).trim(),
+        adet: sayiOku(row[kalemBas.col + 1]),
+        tutar: sayiOku(row[kalemBas.col + 2]),
+      });
+    }
+  }
+
+  return { gunluk, kalemler };
+}
