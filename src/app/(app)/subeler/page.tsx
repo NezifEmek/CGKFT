@@ -38,6 +38,7 @@ export default async function SubelerSayfasi() {
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 dark:bg-neutral-800/50 text-left text-xs text-neutral-500">
             <tr>
+              <th className="px-4 py-2">Kod</th>
               <th className="px-4 py-2">Şube</th>
               <th className="px-4 py-2">Bölge</th>
               <th className="px-4 py-2">Tip</th>
@@ -51,6 +52,9 @@ export default async function SubelerSayfasi() {
                 key={s.id}
                 className="border-t border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/40"
               >
+                <td className="px-4 py-2 font-mono text-xs text-neutral-500 whitespace-nowrap">
+                  {s.kod || "—"}
+                </td>
                 <td className="px-4 py-2">
                   <Link href={`/subeler/${s.id}`} className="font-medium hover:underline">
                     {s.ad}
@@ -72,7 +76,7 @@ export default async function SubelerSayfasi() {
             ))}
             {!subeler?.length && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-neutral-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-neutral-400">
                   Görünür şube yok.
                 </td>
               </tr>

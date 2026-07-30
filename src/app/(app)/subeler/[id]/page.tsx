@@ -80,7 +80,14 @@ export default async function SubeDetaySayfasi({
       <Link href="/subeler" className="text-sm text-neutral-500 hover:underline">
         ← Şubeler
       </Link>
-      <h1 className="text-xl font-semibold mt-2 mb-1">{sube.ad}</h1>
+      <div className="flex flex-wrap items-baseline gap-3 mt-2 mb-1">
+        <h1 className="text-xl font-semibold">{sube.ad}</h1>
+        {sube.kod && (
+          <span className="font-mono text-sm px-2 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
+            {sube.kod}
+          </span>
+        )}
+      </div>
       <p className="text-sm text-neutral-500 mb-6">
         {sube.bolge} · {sube.tip === "MS" ? "Merkez Şube" : "Franchise"}
         {sube.il ? ` · ${sube.il}` : ""}
