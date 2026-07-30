@@ -95,11 +95,30 @@ export default async function TrelloSayfasi() {
   }
 
   if (hata) {
+    const t = trelloTanila();
     return (
       <div className="space-y-4">
         <h1 className="text-xl font-semibold">Trello</h1>
-        <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900 p-4 text-sm text-red-800 dark:text-red-300">
-          {hata}
+        <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900 p-4 text-sm text-red-800 dark:text-red-300 space-y-3">
+          <p>{hata}</p>
+          <ul className="text-[13px] space-y-1 pt-1 border-t border-red-200 dark:border-red-900">
+            <li>
+              <code className="text-xs">TRELLO_API_KEY</code>: {t.anahtarIpucu || "yok"}
+            </li>
+            <li>
+              <code className="text-xs">TRELLO_TOKEN</code>: {t.tokenUzunluk} karakter{" "}
+              {t.tokenUzunluk === 64 ? (
+                <span className="text-emerald-700 dark:text-emerald-400">
+                  (beklenen uzunluk ✓)
+                </span>
+              ) : (
+                <span className="font-semibold">
+                  — Trello token&apos;ları normalde <b>64</b> karakterdir, bu değer beklenenden
+                  farklı
+                </span>
+              )}
+            </li>
+          </ul>
         </div>
       </div>
     );

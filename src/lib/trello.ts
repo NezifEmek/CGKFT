@@ -119,6 +119,52 @@ export class TrelloHatasi extends Error {
 }
 
 /**
+ * Hata gövdesini güvenle okur. Trello'nun kimlik hataları kısa düz metindir,
+ * ama gövdede URL geçme ihtimaline karşı (URL sorgu dizesinde token var)
+ * içinde adres benzeri bir şey varsa tamamen atıyoruz.
+ */
+async function guvenliGovde(yanit: Response): Promise<string> {
+  let ham: string;
+  try {
+    ham = (await yanit.text()).trim();
+  } catch {
+    return "";
+  }
+  if (!ham) return "";
+  if (/https?:|api\.trello|key=|token=/i.test(ham)) return "";
+  // Yalnızca kısa, tek satırlık, yazdırılabilir metin.
+  const temiz = ham.replace(/\s+/g, " ").slice(0, 120);
+  return /^[\x20-\x7E]+$/.test(temiz) ? temiz : "";
+}
+
+/** Trello'nun kısa hata metnini kullanıcıya ne yapacağını söyleyen cümleye çevirir. */
+function trelloSebepAcikla(sebep: string, durum: number): string {
+  const s = sebep.toLowerCase();
+
+  if (s.includes("invalid key")) {
+    return "Trello API anahtarı geçersiz. TRELLO_API_KEY değeri, Trello'daki uygulamanın API anahtarıyla birebir aynı olmalı.";
+  }
+  if (s.includes("invalid token")) {
+    return (
+      "Trello token'ı geçersiz. En sık sebep: token, TRELLO_API_KEY'deki anahtardan " +
+      "farklı bir anahtar için üretilmiş olabilir, ya da yapıştırılırken eksik/fazla " +
+      "karakter gelmiş olabilir (Trello token'ları 64 karakterdir). Aynı anahtarla " +
+      "yeniden yetkilendirme gerekiyor."
+    );
+  }
+  if (s.includes("unauthorized permission") || s.includes("permission")) {
+    return "Token'ın yetkisi bu istek için yetersiz. Okuma (read) kapsamıyla yeniden yetkilendirme gerekiyor.";
+  }
+  if (s.includes("expired")) {
+    return "Trello token'ının süresi dolmuş. Yeniden yetkilendirme gerekiyor.";
+  }
+
+  return sebep
+    ? `Trello kimlik doğrulamayı reddetti (HTTP ${durum}): "${sebep}"`
+    : `Trello kimlik doğrulamayı reddetti (HTTP ${durum}).`;
+}
+
+/**
  * Trello'ya GET atar. Kimlik bilgileri sorgu dizesine eklenir (Trello'nun
  * beklediği biçim) ama URL asla istemciye ya da log'a çıkmaz.
  */
@@ -145,18 +191,22 @@ async function trelloGet<T>(
     throw new TrelloHatasi("Trello'ya bağlanılamadı (ağ hatası).");
   }
 
-  if (yanit.status === 401) {
-    throw new TrelloHatasi(
-      "Trello token'ı geçersiz veya süresi dolmuş. Yeniden yetkilendirme gerekiyor.",
-      401,
-    );
+  if (yanit.status === 401 || yanit.status === 400) {
+    // Trello 401'de kısa, düz metin bir sebep döndürür: "invalid key",
+    // "invalid token", "unauthorized permission requested" gibi. Bunu
+    // göstermek şart: aksi halde anahtar mı token mı yanlış anlaşılmıyor.
+    const sebep = await guvenliGovde(yanit);
+    throw new TrelloHatasi(trelloSebepAcikla(sebep, yanit.status), yanit.status);
   }
   if (yanit.status === 429) {
     throw new TrelloHatasi("Trello istek sınırına takıldı, birazdan tekrar deneyin.", 429);
   }
   if (!yanit.ok) {
-    // Hata gövdesini olduğu gibi yansıtmıyoruz; içinde URL (dolayısıyla token) olabilir.
-    throw new TrelloHatasi(`Trello isteği başarısız (HTTP ${yanit.status}).`, yanit.status);
+    const sebep = await guvenliGovde(yanit);
+    throw new TrelloHatasi(
+      `Trello isteği başarısız (HTTP ${yanit.status})${sebep ? ": " + sebep : "."}`,
+      yanit.status,
+    );
   }
 
   return (await yanit.json()) as T;
