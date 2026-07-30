@@ -166,23 +166,87 @@ export function sayfaAyBul(sayfaAdi: string): string | null {
   return AYLAR_12.find((a) => u.includes(a)) ?? null;
 }
 
-/** Sayfa adından şube tahmini: adı sayfa adının içinde geçen merkez şube. */
+/**
+ * Ünsüz iskeleti: sesli harfler atılır, Türkçe'ye özgü ünsüzler sadeleştirilir.
+ * Gerçek dosyada sayfa adları kısaltma ("AKMŞ", "FRZL", "BYRMGL") ve bunlar
+ * tam olarak şube adının sesli harfsiz hali oluyor:
+ *   AKMEŞE → KMS = AKMŞ → KMS,  FERİZLİ → FRZL,  BAYRAMOĞLU → BYRMGL
+ */
+function unsuzIskeleti(s: string): string {
+  return s
+    .replace(/i/g, "İ")
+    .toUpperCase()
+    .replace(/Ğ/g, "G")
+    .replace(/Ş/g, "S")
+    .replace(/Ç/g, "C")
+    .replace(/[^A-Z0-9]/g, "")
+    .replace(/[AEIİOÖUÜ]/g, "");
+}
+
+function sadeAd(ad: string): string {
+  return ad
+    .replace(/i/g, "İ")
+    .toUpperCase()
+    .replace(/\s*ŞUBE\s*$/, "")
+    .trim();
+}
+
+/**
+ * Şube tahmini. Sırasıyla:
+ *   1) Sayfanın A1 hücresi — gerçek dosyada tam şube adı orada ("AKMEŞE ŞUBE")
+ *   2) Sayfa adı içinde tam ad geçiyor mu
+ *   3) Ünsüz iskeleti eşleşmesi — kısaltma sayfa adları için
+ */
 export function sayfaSubeTahmin(
   sayfaAdi: string,
   subeler: { id: string; ad: string; tip: string }[],
+  a1Hucresi?: unknown,
 ): string | null {
-  const u = sayfaAdi.replace(/i/g, "İ").toUpperCase();
   const adaylar = subeler
     .filter((s) => s.tip === "MS")
-    .map((s) => ({ id: s.id, ad: s.ad.replace(/i/g, "İ").toUpperCase() }))
+    // İskelet SADE addan hesaplanmalı; "ŞUBE" eki dahil edilirse
+    // "95EVLER ŞUBE" → 95VLRSB olur ve "95 EVLER" (95VLR) ile tutmaz.
+    .map((s) => {
+      const sade = sadeAd(s.ad);
+      return { id: s.id, sade, iskelet: unsuzIskeleti(sade) };
+    })
     // Uzun ad önce: "DERİNCE2" ile "DERİNCE" karışmasın.
-    .sort((a, b) => b.ad.length - a.ad.length);
+    .sort((a, b) => b.sade.length - a.sade.length);
 
-  for (const s of adaylar) {
-    const cekirdek = s.ad.replace(/\s*ŞUBE\s*$/, "").trim();
-    if (cekirdek && u.includes(cekirdek)) return s.id;
+  // A1 tarih hücresi olabiliyor (bir sayfada başlık kaymış); o zaman atlanır.
+  const a1Ham = typeof a1Hucresi === "string" ? a1Hucresi.trim() : "";
+  const a1 = a1Ham && !/^\w{3} \w{3} \d{2} \d{4}/.test(a1Ham) ? sadeAd(a1Ham) : "";
+
+  const dene = (metin: string): string | null => {
+    if (!metin) return null;
+    // Sıra önemli: tam eşleşme → tam iskelet → en son parçalı eşleşme.
+    // Parçalı önce denenirse "AKYAZI-3" metni "AKYAZI"ya takılıp
+    // "AKYAZI3" şubesini kaçırıyordu.
+    for (const s of adaylar) if (s.sade && metin === s.sade) return s.id;
+    const isk = unsuzIskeleti(metin);
+    if (isk.length >= 3) {
+      for (const s of adaylar) if (s.iskelet && isk === s.iskelet) return s.id;
+    }
+    for (const s of adaylar) if (s.sade && metin.includes(s.sade)) return s.id;
+    return null;
+  };
+
+  return dene(a1) ?? dene(sadeAd(sayfaAdi));
+}
+
+/** Günlük kayıtlarda en çok geçen (yıl, ay) — kalemlerin dönemi bundan türetilir. */
+export function baskinDonem(
+  gunluk: { tarih: string }[],
+): { yil: number; ay: string } | null {
+  if (!gunluk.length) return null;
+  const sayim = new Map<string, number>();
+  for (const g of gunluk) {
+    const k = `${yilAl(g.tarih)}|${ayAdi(g.tarih)}`;
+    sayim.set(k, (sayim.get(k) ?? 0) + 1);
   }
-  return null;
+  const [enCok] = [...sayim].sort((a, b) => b[1] - a[1]);
+  const [yil, ay] = enCok[0].split("|");
+  return { yil: Number(yil), ay };
 }
 
 export interface SayfaSonucu {

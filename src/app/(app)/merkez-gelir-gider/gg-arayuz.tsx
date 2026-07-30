@@ -19,8 +19,8 @@ import {
   ayAdi,
   yilAl,
   sayfaAyristir,
-  sayfaAyBul,
   sayfaSubeTahmin,
+  baskinDonem,
   type GunlukKayit,
   type Kalem,
 } from "@/lib/merkez-gg";
@@ -625,17 +625,25 @@ function ExcelAktar({ subeler }: { subeler: GGSube[] }) {
         const parsed = sayfaAyristir(grid);
         if (!parsed || !parsed.gunluk.length) continue;
 
-        const ay = sayfaAyBul(sayfaAdi);
-        // Sayfa adının ayına ait olmayan günleri ele (komşu ay taşmaları).
-        const gunluk = ay ? parsed.gunluk.filter((g) => ayAdi(g.tarih) === ay) : parsed.gunluk;
-        if (!gunluk.length) continue;
+        // Günleri sayfa adının ayına göre ELEMİYORUZ: gerçek dosyada ay bilgisi
+        // sayfa adında değil dosya adında ve tablolar önceki ayın son günleriyle
+        // başlıyor (ör. 27–30 Nisan + Mayıs). Günlük kayıtlar zaten gerçek
+        // tarihle saklandığı için her gün kendi ayına yazılır. Dönem etiketi
+        // yalnızca aylık kalemler için gerekiyor; onu baskın aydan alıyoruz.
+        const donem = baskinDonem(parsed.gunluk);
+        if (!donem) continue;
 
         satirlar.push({
           sayfaAdi,
-          ay,
-          yil: yilAl(gunluk[0].tarih),
-          subeId: sayfaSubeTahmin(sayfaAdi, subeler.map((s) => ({ ...s, tip: "MS" }))) ?? "",
-          gunluk,
+          ay: donem.ay,
+          yil: donem.yil,
+          subeId:
+            sayfaSubeTahmin(
+              sayfaAdi,
+              subeler.map((s) => ({ ...s, tip: "MS" })),
+              grid[0]?.[0],
+            ) ?? "",
+          gunluk: parsed.gunluk,
           kalemler: parsed.kalemler,
         });
       }
