@@ -23,6 +23,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: "/segment-takibi", etiket: "🧭 Segment Takibi" },
     { href: "/dusus-uyarilari", etiket: "🚨 Düşüş Uyarıları" },
     { href: "/sube-denetimi", etiket: "📋 Şube Denetimi" },
+    { href: "/hizli-skor", etiket: "⚡ Hızlı Skor Girişi" },
     { href: "/bolge-analizi", etiket: "🗺️ Bölge Analizi" },
     { href: "/ciro-karlilik", etiket: "💰 Ciro & Kârlılık" },
     { href: "/ice-disa-aktar", etiket: "📥 İçe / Dışa Aktar" },
