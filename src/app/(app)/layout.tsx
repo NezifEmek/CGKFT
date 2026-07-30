@@ -28,6 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { href: "/ciro-karlilik", etiket: "💰 Ciro & Kârlılık" },
     { href: "/ice-disa-aktar", etiket: "📥 İçe / Dışa Aktar" },
     { href: "/dokuman", etiket: "📄 Doküman Yönetimi" },
+    ...(profile.rol !== "denetmen" ? [{ href: "/prim-hakedis", etiket: "💵 Prim Hakediş" }] : []),
     ...(adminMi ? [{ href: "/kullanicilar", etiket: "👥 Kullanıcılar" }] : []),
   ];
 
