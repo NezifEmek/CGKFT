@@ -15,14 +15,21 @@ export default async function KullanicilarSayfasi() {
 
   // E-posta, son giriş ve engel durumu profiles'ta değil auth şemasında;
   // oraya yalnızca service_role erişebiliyor.
-  const [{ data: kullanicilar }, { data: subeler }, authSonuc, denetimler, skorlar] =
+  const [{ data: kullanicilar }, { data: subeler }, authSonuc, denetimler, skorlar, erisimler] =
     await Promise.all([
       supabase.from("profiles").select("*").order("ad_soyad").returns<Profile[]>(),
       supabase.from("subeler").select("*").order("ad").returns<Sube[]>(),
       admin.auth.admin.listUsers({ perPage: 1000 }),
       admin.from("denetimler").select("denetmen_id"),
       admin.from("skorlar").select("olusturan_id"),
+      admin.from("sube_erisim").select("profil_id, sube_id"),
     ]);
+
+  const erisimMap = new Map<string, string[]>();
+  for (const e of erisimler.data ?? []) {
+    if (!erisimMap.has(e.profil_id)) erisimMap.set(e.profil_id, []);
+    erisimMap.get(e.profil_id)!.push(e.sube_id);
+  }
 
   const authBilgi = new Map(
     (authSonuc.data?.users ?? []).map((u) => [
@@ -60,8 +67,27 @@ export default async function KullanicilarSayfasi() {
       engelliMi: a?.engelliMi ?? false,
       denetimSayisi: denetimSay.get(k.id) ?? 0,
       skorSayisi: skorSay.get(k.id) ?? 0,
+      yetki: {
+        id: k.id,
+        adSoyad: k.ad_soyad,
+        rol: k.rol,
+        bolge: k.bolge,
+        kapsamTuru: k.kapsam_turu ?? "rol",
+        kapsamTipi: k.kapsam_tipi ?? null,
+        yazabilir: k.yazabilir ?? false,
+        sayfaYetkileri: Array.isArray(k.sayfa_yetkileri) ? k.sayfa_yetkileri : [],
+        seciliSubeIdler: erisimMap.get(k.id) ?? [],
+      },
     };
   });
+
+  const yetkiSubeler = (subeler ?? []).map((s) => ({
+    id: s.id,
+    ad: s.ad,
+    kod: s.kod ?? "",
+    bolge: s.bolge,
+    tip: s.tip,
+  }));
 
   const bolgeler = [
     ...new Set((subeler ?? []).map((s) => s.bolge).filter(Boolean)),
@@ -104,6 +130,7 @@ export default async function KullanicilarSayfasi() {
                 key={k.id}
                 k={k}
                 bolgeler={bolgeler}
+                subeler={yetkiSubeler}
                 benMiyim={k.id === profile.id}
               />
             ))}

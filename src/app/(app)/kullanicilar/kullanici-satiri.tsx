@@ -10,6 +10,7 @@ import {
   kullaniciSil,
 } from "./yonetim-actions";
 import { ROL_ETIKET, type Rol } from "@/types/database";
+import { YetkiPaneli, type YetkiVerisi, type YetkiSube } from "./yetki-paneli";
 
 const girdiSinif =
   "rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2.5 py-1.5 text-sm";
@@ -26,6 +27,7 @@ export interface KullaniciSatiriVerisi {
   engelliMi: boolean;
   denetimSayisi: number;
   skorSayisi: number;
+  yetki: YetkiVerisi;
 }
 
 function tarihFmt(s: string | null): string {
@@ -42,10 +44,12 @@ function tarihFmt(s: string | null): string {
 export function KullaniciSatiri({
   k,
   bolgeler,
+  subeler,
   benMiyim,
 }: {
   k: KullaniciSatiriVerisi;
   bolgeler: string[];
+  subeler: YetkiSube[];
   benMiyim: boolean;
 }) {
   const [acik, setAcik] = useState(false);
@@ -297,6 +301,16 @@ export function KullaniciSatiri({
               <p className="text-sm text-emerald-600 mt-3 max-w-4xl">✓ {durum.ok}</p>
             )}
             {durum?.hata && <p className="text-sm text-red-600 mt-3 max-w-4xl">{durum.hata}</p>}
+
+            <div className="mt-5 pt-4 border-t-2 border-neutral-200 dark:border-neutral-700">
+              <p className="text-sm font-semibold mb-3">🔐 Yetkilendirme</p>
+              <YetkiPaneli
+                k={k.yetki}
+                bolgeler={bolgeler}
+                subeler={subeler}
+                benMiyim={benMiyim}
+              />
+            </div>
           </td>
         </tr>
       )}

@@ -1,46 +1,19 @@
 import { requireProfile } from "@/lib/auth";
 import { ROL_ETIKET } from "@/types/database";
+import { SAYFALAR, gorunurSayfalar } from "@/lib/yetkiler";
 import { cikisYap } from "./actions";
 import { YanMenuLinkleri, type MenuOgesi } from "./yan-menu";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const profile = await requireProfile();
-  const adminMi = profile.rol === "admin";
 
-  const menu: MenuOgesi[] = [
-    { href: "/", etiket: "📊 Genel Bakış" },
-    { href: "/subeler", etiket: "🏪 Şubeler" },
-    ...(profile.rol !== "denetmen"
-      ? [{ href: "/sube-yonetimi", etiket: "⚙️ Şube Yönetimi" }]
-      : []),
-    { href: "/top30", etiket: "🏆 Top 30 Şube" },
-    { href: "/yoy-karsilastirma", etiket: "📈 2026 vs 2025" },
-    { href: "/aylik-degisim", etiket: "🔀 Aylık Değişim Analizi" },
-    { href: "/kpi-takibi", etiket: "🎯 KPI Takibi" },
-    { href: "/yetkili-analizi", etiket: "🧑‍💼 Yetkili Analizi" },
-    { href: "/aylar-veri", etiket: "🗓️ Aylar & Veri" },
-    { href: "/segmentasyon", etiket: "⭐ Segmentasyon" },
-    { href: "/segment-takibi", etiket: "🧭 Segment Takibi" },
-    { href: "/dusus-uyarilari", etiket: "🚨 Düşüş Uyarıları" },
-    { href: "/sube-denetimi", etiket: "📋 Şube Denetimi" },
-    { href: "/hizli-skor", etiket: "⚡ Hızlı Skor Girişi" },
-    { href: "/bolge-analizi", etiket: "🗺️ Bölge Analizi" },
-    { href: "/ciro-karlilik", etiket: "💰 Ciro & Kârlılık" },
-    ...(profile.rol !== "denetmen"
-      ? [{ href: "/merkez-gelir-gider", etiket: "💹 Merkez Şube Gelir-Gider" }]
-      : []),
-    { href: "/ice-disa-aktar", etiket: "📥 İçe / Dışa Aktar" },
-    { href: "/dokuman", etiket: "📄 Doküman Yönetimi" },
-    { href: "/organizasyon", etiket: "🏛️ Organizasyon Şeması" },
-    { href: "/trello", etiket: "🗂️ Trello" },
-    ...(profile.rol !== "denetmen"
-      ? [
-          { href: "/prim-hakedis", etiket: "💵 Prim Hakediş" },
-          { href: "/prim-projeksiyon", etiket: "📉 Prim Projeksiyonu" },
-        ]
-      : []),
-    ...(adminMi ? [{ href: "/kullanicilar", etiket: "👥 Kullanıcılar" }] : []),
-  ];
+  // Menü artık tek kaynaktan üretiliyor: kullanıcının sayfa yetkileri
+  // (tanımlı değilse rolün varsayılanı) SAYFALAR listesini süzüyor.
+  const izinli = gorunurSayfalar(profile.rol, profile.sayfa_yetkileri);
+  const menu: MenuOgesi[] = SAYFALAR.filter((s) => izinli.has(s.anahtar)).map((s) => ({
+    href: s.href,
+    etiket: s.etiket,
+  }));
 
   return (
     <div className="min-h-screen flex bg-neutral-100 dark:bg-neutral-950">
