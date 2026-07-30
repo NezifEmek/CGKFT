@@ -240,6 +240,9 @@ export default async function YetkiliAnaliziSayfasi() {
                 <span className="text-neutral-500">Toplam puan</span>
                 <span className="font-bold">
                   {puanlar.get(d.yt)} / {maksPuan}
+                  <span className="text-neutral-400 font-normal ml-1.5">
+                    (%{maksPuan ? Math.round(((puanlar.get(d.yt) ?? 0) / maksPuan) * 100) : 0})
+                  </span>
                 </span>
               </div>
             </div>
