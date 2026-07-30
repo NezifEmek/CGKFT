@@ -1,15 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import type { Sube, Skor } from "@/types/database";
+import type { Sube, Skor, Denetim } from "@/types/database";
+import type { GecmisKayit } from "@/components/sube-gecmis-paneli";
 import { SkorArayuz, type SkorSube, type SkorKaydi } from "./skor-arayuz";
 
 export default async function HizliSkorSayfasi() {
   await requireProfile();
   const supabase = await createClient();
 
-  const [{ data: subeler }, { data: skorlar }] = await Promise.all([
+  const [{ data: subeler }, { data: skorlar }, { data: denetimler }] = await Promise.all([
     supabase.from("subeler").select("*").order("ad").returns<Sube[]>(),
     supabase.from("skorlar").select("*").order("tarih", { ascending: false }).returns<Skor[]>(),
+    // Form içindeki geçmiş paneli iki kayıt türünü birlikte gösteriyor.
+    supabase.from("denetimler").select("*").order("tarih", { ascending: false }).returns<Denetim[]>(),
   ]);
 
   const subelerListe = subeler ?? [];
@@ -38,6 +41,33 @@ export default async function HizliSkorSayfasi() {
     };
   });
 
+  const gecmis: GecmisKayit[] = [
+    ...(skorlar ?? []).map((s) => {
+      const detay = (s.detay ?? {}) as Record<string, unknown>;
+      return {
+        id: s.id,
+        subeId: s.sube_id,
+        tarih: s.tarih,
+        puan: s.puan == null ? null : Number(s.puan),
+        tur: typeof detay.tur === "string" ? detay.tur : "",
+        kaynak: "skor" as const,
+        kisi: "",
+      };
+    }),
+    ...(denetimler ?? []).map((d) => {
+      const detay = (d.detay ?? {}) as Record<string, unknown>;
+      return {
+        id: d.id,
+        subeId: d.sube_id,
+        tarih: d.tarih,
+        puan: d.puan == null ? null : Number(d.puan),
+        tur: typeof detay.tur === "string" ? detay.tur : "",
+        kaynak: "denetim" as const,
+        kisi: typeof detay.denetleyen === "string" ? detay.denetleyen : "",
+      };
+    }),
+  ];
+
   return (
     <div className="space-y-4">
       <div>
@@ -51,7 +81,7 @@ export default async function HizliSkorSayfasi() {
       {/* yazabilir her rolde true — hangi şubeye yazılabildiğini RLS sınırlar
           (denetmen: atandığı şube, bölge müdürü: kendi bölgesi, admin/GM: hepsi). */}
       {subelerListe.length ? (
-        <SkorArayuz subeler={formSubeler} kayitlar={kayitlar} yazabilir />
+        <SkorArayuz subeler={formSubeler} kayitlar={kayitlar} gecmis={gecmis} yazabilir />
       ) : (
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300">
           Skor girebileceğiniz görünür şube yok.

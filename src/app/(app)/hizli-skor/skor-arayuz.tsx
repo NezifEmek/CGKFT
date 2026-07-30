@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import { skorKaydet, skorSil } from "./actions";
 import { SKOR_TURLERI, TUR_IKON, TUR_RENK, puanRenk } from "@/lib/skor";
+import { SubeGecmisPaneli, type GecmisKayit } from "@/components/sube-gecmis-paneli";
 
 export interface SkorSube {
   id: string;
@@ -29,10 +30,12 @@ const girdiSinif =
 export function SkorArayuz({
   subeler,
   kayitlar,
+  gecmis,
   yazabilir,
 }: {
   subeler: SkorSube[];
   kayitlar: SkorKaydi[];
+  gecmis: GecmisKayit[];
   yazabilir: boolean;
 }) {
   const [kayitDurum, kayitAction, kayitPending] = useActionState(skorKaydet, null);
@@ -188,6 +191,8 @@ export function SkorArayuz({
               </select>
             </label>
           </div>
+
+          <SubeGecmisPaneli kayitlar={gecmis} subeId={subeId} />
 
           {/* Tür seçimi — rozet düğmeler */}
           <div>

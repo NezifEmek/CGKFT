@@ -2,6 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { denetimKaydet } from "./actions";
+import { SubeGecmisPaneli, type GecmisKayit } from "@/components/sube-gecmis-paneli";
 import {
   KATEGORILER,
   CEVAP_ETIKETLERI,
@@ -23,7 +24,15 @@ export interface FormSube {
 const girdiSinif =
   "rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2.5 py-1.5 text-sm";
 
-export function DenetimFormu({ subeler, adSoyad }: { subeler: FormSube[]; adSoyad: string }) {
+export function DenetimFormu({
+  subeler,
+  adSoyad,
+  gecmis,
+}: {
+  subeler: FormSube[];
+  adSoyad: string;
+  gecmis: GecmisKayit[];
+}) {
   const [durum, action, pending] = useActionState(denetimKaydet, null);
 
   const [bolge, setBolge] = useState("");
@@ -190,6 +199,10 @@ export function DenetimFormu({ subeler, adSoyad }: { subeler: FormSube[]; adSoya
               className={girdiSinif + " w-full"}
             />
           </label>
+        </div>
+
+        <div className="mt-3">
+          <SubeGecmisPaneli kayitlar={gecmis} subeId={subeId} />
         </div>
       </div>
 

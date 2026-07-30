@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import type { Sube, Denetim } from "@/types/database";
+import type { Sube, Denetim, Skor } from "@/types/database";
+import type { GecmisKayit } from "@/components/sube-gecmis-paneli";
 import { DenetimFormu, type FormSube } from "./denetim-formu";
 import { GecmisListesi, type GecmisKaydi } from "./gecmis-listesi";
 
@@ -15,9 +16,11 @@ export default async function SubeDenetimiSayfasi({
   const sp = await searchParams;
   const sekme = sp.sekme === "gecmis" ? "gecmis" : "form";
 
-  const [{ data: subeler }, { data: denetimler }] = await Promise.all([
+  const [{ data: subeler }, { data: denetimler }, { data: skorlar }] = await Promise.all([
     supabase.from("subeler").select("*").order("ad").returns<Sube[]>(),
     supabase.from("denetimler").select("*").order("tarih", { ascending: false }).returns<Denetim[]>(),
+    // Form içindeki geçmiş paneli iki kayıt türünü birlikte gösteriyor.
+    supabase.from("skorlar").select("*").order("tarih", { ascending: false }).returns<Skor[]>(),
   ]);
 
   const subelerListe = subeler ?? [];
@@ -48,6 +51,31 @@ export default async function SubeDenetimiSayfasi({
     };
   });
 
+  // Formdaki "bu şubenin geçmişi" paneli için denetim + hızlı skor birleşik listesi.
+  const gecmis: GecmisKayit[] = [
+    ...kayitlar.map((k) => ({
+      id: k.id,
+      subeId: k.subeId,
+      tarih: k.tarih,
+      puan: k.puan,
+      tur: k.tur,
+      kaynak: "denetim" as const,
+      kisi: k.denetleyen,
+    })),
+    ...(skorlar ?? []).map((s) => {
+      const detay = (s.detay ?? {}) as Record<string, unknown>;
+      return {
+        id: s.id,
+        subeId: s.sube_id,
+        tarih: s.tarih,
+        puan: s.puan == null ? null : Number(s.puan),
+        tur: typeof detay.tur === "string" ? detay.tur : "",
+        kaynak: "skor" as const,
+        kisi: "",
+      };
+    }),
+  ];
+
   const sekmeSinif = (aktif: boolean) =>
     `px-5 py-2.5 text-sm border-b-2 -mb-0.5 ${
       aktif
@@ -75,7 +103,11 @@ export default async function SubeDenetimiSayfasi({
 
       {sekme === "form" ? (
         subelerListe.length ? (
-          <DenetimFormu subeler={formSubeler} adSoyad={profile.ad_soyad ?? ""} />
+          <DenetimFormu
+            subeler={formSubeler}
+            adSoyad={profile.ad_soyad ?? ""}
+            gecmis={gecmis}
+          />
         ) : (
           <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300">
             Denetim girebileceğiniz görünür şube yok.

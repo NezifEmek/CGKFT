@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import type { Ay, Sube, Denetim } from "@/types/database";
+import type { Ay, Sube, Denetim, Skor } from "@/types/database";
+import { SubeGecmisPaneli, type GecmisKayit } from "@/components/sube-gecmis-paneli";
 import { KgGrid } from "../kg-grid";
 import { DenetimForm } from "../denetim-form";
 
@@ -23,17 +24,53 @@ export default async function SubeDetaySayfasi({
 
   if (!sube) notFound();
 
-  const [{ data: aylar }, { data: satislar }, { data: denetimler }] = await Promise.all([
-    supabase.from("aylar").select("*").order("yil").returns<Ay[]>(),
-    supabase.from("aylik_satislar").select("yil, ay, kg").eq("sube_id", id),
-    supabase
-      .from("denetimler")
-      .select("*")
-      .eq("sube_id", id)
-      .order("tarih", { ascending: false })
-      .limit(10)
-      .returns<Denetim[]>(),
-  ]);
+  const [{ data: aylar }, { data: satislar }, { data: denetimler }, { data: skorlar }] =
+    await Promise.all([
+      supabase.from("aylar").select("*").order("yil").returns<Ay[]>(),
+      supabase.from("aylik_satislar").select("yil, ay, kg").eq("sube_id", id),
+      supabase
+        .from("denetimler")
+        .select("*")
+        .eq("sube_id", id)
+        .order("tarih", { ascending: false })
+        .limit(10)
+        .returns<Denetim[]>(),
+      supabase
+        .from("skorlar")
+        .select("*")
+        .eq("sube_id", id)
+        .order("tarih", { ascending: false })
+        .limit(10)
+        .returns<Skor[]>(),
+    ]);
+
+  // Denetim + hızlı skor kayıtları tek listede.
+  const gecmis: GecmisKayit[] = [
+    ...(denetimler ?? []).map((d) => {
+      const detay = (d.detay ?? {}) as Record<string, unknown>;
+      return {
+        id: d.id,
+        subeId: d.sube_id,
+        tarih: d.tarih,
+        puan: d.puan == null ? null : Number(d.puan),
+        tur: typeof detay.tur === "string" ? detay.tur : "",
+        kaynak: "denetim" as const,
+        kisi: typeof detay.denetleyen === "string" ? detay.denetleyen : "",
+      };
+    }),
+    ...(skorlar ?? []).map((s) => {
+      const detay = (s.detay ?? {}) as Record<string, unknown>;
+      return {
+        id: s.id,
+        subeId: s.sube_id,
+        tarih: s.tarih,
+        puan: s.puan == null ? null : Number(s.puan),
+        tur: typeof detay.tur === "string" ? detay.tur : "",
+        kaynak: "skor" as const,
+        kisi: "",
+      };
+    }),
+  ];
 
   const kgDuzenlenebilir = profile.rol !== "denetmen";
   const denetmenMi = profile.rol === "denetmen";
@@ -67,20 +104,9 @@ export default async function SubeDetaySayfasi({
         </section>
 
         <section className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-5">
-          <h2 className="text-sm font-semibold mb-3">Denetim Kayıtları</h2>
-          <div className="space-y-2 mb-4">
-            {(denetimler ?? []).map((d) => (
-              <div
-                key={d.id}
-                className="flex items-center justify-between text-sm border-b border-neutral-100 dark:border-neutral-800 pb-2"
-              >
-                <span className="text-neutral-500">{d.tarih}</span>
-                <span className="font-medium">{d.puan}/100</span>
-              </div>
-            ))}
-            {!denetimler?.length && (
-              <p className="text-sm text-neutral-400">Henüz denetim kaydı yok.</p>
-            )}
+          <h2 className="text-sm font-semibold mb-3">Denetim ve Skor Kayıtları</h2>
+          <div className="mb-4">
+            <SubeGecmisPaneli kayitlar={gecmis} subeId={sube.id} limit={10} />
           </div>
 
           {denetmenMi && (
