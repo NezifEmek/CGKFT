@@ -1,0 +1,134 @@
+import Link from "next/link";
+import { requireProfile } from "@/lib/auth";
+import {
+  calismaAlanlari,
+  panolar,
+  panolariSirala,
+  oncelikliMi,
+  trelloYapilandirildiMi,
+  TrelloHatasi,
+  type TrelloPano,
+} from "@/lib/trello";
+
+function tarihFmt(s: string | null): string {
+  if (!s) return "—";
+  return new Date(s).toLocaleDateString("tr-TR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export default async function TrelloSayfasi() {
+  await requireProfile();
+
+  if (!trelloYapilandirildiMi()) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-xl font-semibold">Trello</h1>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300 space-y-2">
+          <p>
+            <b>Trello bağlantısı henüz kurulmamış.</b>
+          </p>
+          <p>
+            Bu ekranın çalışması için <code className="text-xs">TRELLO_API_KEY</code> ve{" "}
+            <code className="text-xs">TRELLO_TOKEN</code> ortam değişkenlerinin tanımlı olması
+            gerekiyor. Token yalnızca okuma yetkisiyle üretilmelidir — panel Trello&apos;da hiçbir
+            şeyi değiştirmez.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  let alanlar: Awaited<ReturnType<typeof calismaAlanlari>> = [];
+  let tumPanolar: TrelloPano[] = [];
+  let hata: string | null = null;
+
+  try {
+    [alanlar, tumPanolar] = await Promise.all([calismaAlanlari(), panolar()]);
+  } catch (e) {
+    hata = e instanceof TrelloHatasi ? e.message : "Trello verisi alınamadı.";
+  }
+
+  if (hata) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-xl font-semibold">Trello</h1>
+        <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900 p-4 text-sm text-red-800 dark:text-red-300">
+          {hata}
+        </div>
+      </div>
+    );
+  }
+
+  // Panoları çalışma alanına göre grupla; alanı olmayanlar "Kişisel" altında.
+  const alanAdi = new Map(alanlar.map((a) => [a.id, a.displayName]));
+  const gruplar = new Map<string, TrelloPano[]>();
+  for (const p of tumPanolar) {
+    const anahtar = p.idOrganization ?? "_kisisel";
+    if (!gruplar.has(anahtar)) gruplar.set(anahtar, []);
+    gruplar.get(anahtar)!.push(p);
+  }
+
+  // Öncelikli pano içeren çalışma alanları önce görünsün.
+  const siraliGruplar = [...gruplar].sort(([, a], [, b]) => {
+    const oa = a.some((p) => oncelikliMi(p.name)) ? 0 : 1;
+    const ob = b.some((p) => oncelikliMi(p.name)) ? 0 : 1;
+    return oa - ob;
+  });
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-semibold mb-1">Trello</h1>
+        <p className="text-sm text-neutral-500">
+          {tumPanolar.length} pano · {alanlar.length} çalışma alanı · salt okunur, veriler 5
+          dakikada bir yenilenir
+        </p>
+      </div>
+
+      {siraliGruplar.map(([alanId, liste]) => (
+        <section key={alanId}>
+          <h2 className="text-[11px] font-bold uppercase tracking-wide text-neutral-500 mb-2">
+            {alanId === "_kisisel" ? "Çalışma alanı yok" : alanAdi.get(alanId) ?? "Bilinmeyen alan"}
+          </h2>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {panolariSirala(liste).map((p) => {
+              const onemli = oncelikliMi(p.name);
+              return (
+                <Link
+                  key={p.id}
+                  href={`/trello/${p.id}`}
+                  className={`block rounded-xl border p-4 transition-colors hover:bg-neutral-50 dark:hover:bg-neutral-800/60 ${
+                    onemli
+                      ? "border-red-300 dark:border-red-900 bg-white dark:bg-neutral-900"
+                      : "border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-medium text-[15px] leading-tight">{p.name}</span>
+                    {onemli && (
+                      <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 font-semibold">
+                        takip
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-neutral-400 mt-2">
+                    Son hareket: {tarihFmt(p.dateLastActivity)}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+
+      {!tumPanolar.length && (
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-6 text-center text-sm text-neutral-500">
+          Bu token ile erişilebilen açık pano yok.
+        </div>
+      )}
+    </div>
+  );
+}
