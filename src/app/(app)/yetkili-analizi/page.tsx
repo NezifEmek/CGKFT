@@ -33,9 +33,14 @@ function siraSembol(sira: number) {
   return ["🥇", "🥈", "🥉"][sira] ?? `${sira + 1}.`;
 }
 
-export default async function YetkiliAnaliziSayfasi() {
+export default async function YetkiliAnaliziSayfasi({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   await requireProfile();
   const supabase = await createClient();
+  const sp = await searchParams;
 
   const [{ data: subeler }, satislar, { data: aylar }, { data: segmentAyar }, { data: denetimler }] =
     await Promise.all([
@@ -50,7 +55,19 @@ export default async function YetkiliAnaliziSayfasi() {
 
   const subelerListe = subeler ?? [];
   const gunMap = gunSayisiMap(aylar ?? []);
-  const aktifAylar = aySirala((aylar ?? []).filter((a) => a.yil === CARI_YIL).map((a) => a.ay));
+  const tumAylar = aySirala((aylar ?? []).filter((a) => a.yil === CARI_YIL).map((a) => a.ay));
+
+  // Dönem seçimi: varsayılan tüm aylar. Kümülatif metrikler bu aralıkta
+  // hesaplanır; "aylık" metrikler aralığın son ayını kullanır.
+  const baslangic = sp.baslangic && tumAylar.includes(sp.baslangic) ? sp.baslangic : tumAylar[0];
+  const bitis =
+    sp.bitis && tumAylar.includes(sp.bitis) ? sp.bitis : tumAylar[tumAylar.length - 1];
+  const bIdx = Math.max(0, tumAylar.indexOf(baslangic));
+  const sIdx = Math.max(bIdx, tumAylar.indexOf(bitis));
+  const aktifAylar = tumAylar.slice(bIdx, sIdx + 1);
+  const sonAy = aktifAylar[aktifAylar.length - 1];
+  const tumDonemMi = aktifAylar.length === tumAylar.length;
+
   const esikler = (segmentAyar?.esikler ?? []) as Esik[];
 
   const yetkililer = [...new Set(subelerListe.map((s) => s.merkez_yetkilisi).filter(Boolean))].sort();
@@ -127,12 +144,12 @@ export default async function YetkiliAnaliziSayfasi() {
 
   // ── Sıralama: her metrikte 1. (N puan) → sonuncu (1 puan) ────────────────
   const metrikler = [
-    { ad: "Kümülatif kg", val: (d: (typeof veri)[number]) => d.kum.kg, goster: (d: (typeof veri)[number]) => kgFmt(d.kum.kg) },
-    { ad: "Son ay büyüme", val: (d: (typeof veri)[number]) => d.sonAyDeg ?? -Infinity, goster: (d: (typeof veri)[number]) => (d.sonAyDeg == null ? "—" : yuzdeFmt(d.sonAyDeg * 100)) },
-    { ad: "Ort. kg/gün", val: (d: (typeof veri)[number]) => d.kum.ort, goster: (d: (typeof veri)[number]) => fmt2(d.kum.ort) },
-    { ad: "Kalite şube %", val: (d: (typeof veri)[number]) => d.iyiOran, goster: (d: (typeof veri)[number]) => `%${Math.round(d.iyiOran * 100)}` },
-    { ad: "Net segment ↑", val: (d: (typeof veri)[number]) => d.netYukselen, goster: (d: (typeof veri)[number]) => String(d.netYukselen) },
-    { ad: "Denetim ort. /100", val: (d: (typeof veri)[number]) => d.denetimOrt ?? -1, goster: (d: (typeof veri)[number]) => (d.denetimOrt == null ? "—" : `${d.denetimOrt}/100`) },
+    { ad: "Kümülatif kg (dönem)", val: (d: (typeof veri)[number]) => d.kum.kg, goster: (d: (typeof veri)[number]) => kgFmt(d.kum.kg) },
+    { ad: `Aylık büyüme (${sonAy})`, val: (d: (typeof veri)[number]) => d.sonAyDeg ?? -Infinity, goster: (d: (typeof veri)[number]) => (d.sonAyDeg == null ? "—" : yuzdeFmt(d.sonAyDeg * 100)) },
+    { ad: "Ort. kg/gün (kümülatif)", val: (d: (typeof veri)[number]) => d.kum.ort, goster: (d: (typeof veri)[number]) => fmt2(d.kum.ort) },
+    { ad: "Üst segment şube % (kümülatif)", val: (d: (typeof veri)[number]) => d.iyiOran, goster: (d: (typeof veri)[number]) => `%${Math.round(d.iyiOran * 100)}` },
+    { ad: "Net segment ↑ (dönem)", val: (d: (typeof veri)[number]) => d.netYukselen, goster: (d: (typeof veri)[number]) => String(d.netYukselen) },
+    { ad: "Denetim ort. /100 (tüm kayıtlar)", val: (d: (typeof veri)[number]) => d.denetimOrt ?? -1, goster: (d: (typeof veri)[number]) => (d.denetimOrt == null ? "—" : `${d.denetimOrt}/100`) },
   ];
 
   // Eşit değerler eşit sıra ve eşit puan alır (spor sıralaması). Aksi halde
@@ -159,16 +176,65 @@ export default async function YetkiliAnaliziSayfasi() {
   });
 
   const maksPuan = metrikler.length * veri.length;
-  const sonAy = aktifAylar[aktifAylar.length - 1];
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold mb-1">Yetkili Analizi</h1>
         <p className="text-sm text-neutral-500">
-          Her merkez yetkilisi, sorumluluğundaki şubelerin kümülatif satışına, segment hareketlerine
-          ve denetim performansına göre değerlendirilir. Son ay: <b>{sonAy}</b>.
+          Her merkez yetkilisi, sorumluluğundaki şubelerin satışına, segment hareketlerine ve
+          denetim performansına göre değerlendirilir.
         </p>
+      </div>
+
+      {/* Dönem seçimi */}
+      <form
+        method="get"
+        className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 flex flex-wrap items-end gap-3"
+      >
+        <div>
+          <label className="block text-xs text-neutral-500 mb-1">Başlangıç ayı</label>
+          <select
+            name="baslangic"
+            defaultValue={baslangic}
+            className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2 py-1.5 text-sm"
+          >
+            {tumAylar.map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-neutral-500 mb-1">Bitiş ayı</label>
+          <select
+            name="bitis"
+            defaultValue={bitis}
+            className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2 py-1.5 text-sm"
+          >
+            {tumAylar.map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+        </div>
+        <button
+          type="submit"
+          className="rounded-md bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 px-4 py-2 text-sm font-medium"
+        >
+          Uygula
+        </button>
+        <span className="text-xs text-neutral-500 pb-2">
+          Seçili dönem: <b>{aktifAylar.length} ay</b> ({baslangic}
+          {aktifAylar.length > 1 ? ` – ${bitis}` : ""})
+          {tumDonemMi && " · tüm yıl"}
+        </span>
+      </form>
+
+      {/* Hangi metrik kümülatif, hangisi aylık */}
+      <div className="rounded-lg bg-neutral-50 dark:bg-neutral-900/60 border-l-[3px] border-red-700 px-4 py-3 text-xs text-neutral-600 dark:text-neutral-400 leading-relaxed">
+        <b>Kümülatif</b> metrikler seçili dönemin tamamını toplar: kümülatif kg, ort. kg/gün,
+        kalite şube %, net segment ↑, denetim ortalaması. <b>Aylık</b> metrik yalnızca dönemin son
+        ayına bakar: <b>{sonAy}</b> ayının bir önceki aya göre büyümesi. Kartlardaki
+        &quot;{sonAy} kg&quot; satırı da tek aylıktır.
       </div>
 
       {/* Yetkili kartları */}
@@ -201,7 +267,7 @@ export default async function YetkiliAnaliziSayfasi() {
                   <dd>{fmt2(d.kum.ort)}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-neutral-500">{sonAy}</dt>
+                  <dt className="text-neutral-500">{sonAy} (tek ay)</dt>
                   <dd>
                     {kgFmt(d.sonAyKg)}{" "}
                     {d.sonAyDeg != null && (
@@ -212,7 +278,9 @@ export default async function YetkiliAnaliziSayfasi() {
                   </dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-neutral-500">Kalite şube</dt>
+                  <dt className="text-neutral-500" title="Üst 3 segmentteki şube / aktif şube">
+                    Üst segment şube
+                  </dt>
                   <dd>
                     {d.iyiSube} / {d.kum.aktifSube} (%{Math.round(d.iyiOran * 100)})
                   </dd>
