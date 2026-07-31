@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { primAyarlariNormalize, pozisyonlariNormalize } from "@/lib/dokuman";
-import { gorunurPozisyonlar } from "@/lib/organizasyon";
 import { aySirala } from "@/lib/analytics";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
@@ -30,24 +29,21 @@ export default async function PrimHakedisSayfasi() {
   const tabloYok = Boolean(ayarSonuc.error);
   const ayarlar = primAyarlariNormalize(ayarSonuc.data?.prim_ayarlari);
 
-  // Admin dışındaki kullanıcı kişi başı prim tablosunda yalnızca kendisini ve
-  // astlarını görür. Havuzlar ve şirket toplamları herkese açık kalır —
-  // hedefin tutup tutmadığını görmek herkesin işi.
+  // Prim ÖZELDİR: admin dışındaki kullanıcı yalnızca KENDİ tutarını görür —
+  // astlarınınkini bile değil (Nezif: "sadece kendi primini görmeli").
+  // KPI ve görev tanımında astlar görünür, primde görünmez; para bilgisi
+  // yönetim bilgisinden farklı ele alınıyor.
   const { data: dokData } = await supabase
     .from("dokuman_ayarlari")
     .select("pozisyonlar")
     .eq("id", 1)
     .maybeSingle<{ pozisyonlar: unknown }>();
   const pozisyonlar = pozisyonlariNormalize(dokData?.pozisyonlar);
-  const gorunurPoz = gorunurPozisyonlar(profile.rol, profile.pozisyon_id, pozisyonlar);
-  const gorunurKisiAdlari = gorunurPoz
-    ? new Set(
-        pozisyonlar
-          .filter((p) => gorunurPoz.has(p.id))
-          .map((p) => (p.adSoyad || "").trim())
-          .filter(Boolean),
-      )
-    : null;
+  const kendiPoz = pozisyonlar.find((p) => p.id === profile.pozisyon_id);
+  const gorunurKisiAdlari =
+    profile.rol === "admin"
+      ? null
+      : new Set([kendiPoz?.adSoyad?.trim()].filter(Boolean) as string[]);
 
   // Yıl içinde takvim sırası, yıllar arasında artan sıra.
   const yillar = [...new Set((aylar ?? []).map((a) => a.yil))].sort((x, y) => x - y);

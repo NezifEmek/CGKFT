@@ -461,7 +461,7 @@ export function PrimArayuz({
             </p>
             {gizlenen > 0 && (
               <p className="text-[11px] text-neutral-400 mt-1">
-                Bu listede yalnızca siz ve astlarınız görünüyor; {gizlenen} kişinin satırı
+                Bu listede yalnızca kendi priminiz görünüyor; {gizlenen} kişinin satırı
                 gizlendi. TOPLAM satırı havuzun tamamını gösterir.
               </p>
             )}
