@@ -159,7 +159,10 @@ export default async function TrelloSayfasi() {
       <div>
         <h1 className="text-xl font-semibold mb-1">Trello</h1>
         <p className="text-sm text-neutral-500">
-          {tumPanolar.length} pano · {alanlar.length} çalışma alanı · salt okunur, veriler 5
+          {/* Açık panosu kalmayan çalışma alanları sayılmıyor: token birden
+              fazla alana erişebiliyor ama panoları kapatılmışsa ekranda
+              bölüm çıkmıyordu, sayı ile görünen uyuşmuyordu. */}
+          {tumPanolar.length} pano · {gruplar.size} çalışma alanı · salt okunur, veriler 5
           dakikada bir yenilenir
         </p>
       </div>
