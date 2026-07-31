@@ -7,7 +7,7 @@ import { SAYFALAR } from "@/lib/yetkiler";
 
 type Sonuc = { hata?: string; ok?: string };
 
-const KAPSAMLAR = ["rol", "tum", "bolge", "tip", "secili"];
+const KAPSAMLAR = ["rol", "tum", "bolge", "tip", "secili", "yetkili"];
 const GECERLI_ANAHTARLAR = new Set(SAYFALAR.map((s) => s.anahtar));
 
 async function adminOl() {
@@ -37,6 +37,11 @@ export async function yetkiKaydet(_onceki: Sonuc | null, formData: FormData): Pr
     return { hata: "Bölge kapsamı için bir bölge seçmelisiniz." };
   }
 
+  const kapsamYetkilisi = String(formData.get("kapsam_yetkilisi") || "").trim();
+  if (kapsamTuru === "yetkili" && !kapsamYetkilisi) {
+    return { hata: "Sorumluluk kapsamı için bir şube sorumlusu seçmelisiniz." };
+  }
+
   const yazabilir = formData.get("yazabilir") === "1";
 
   // Sayfa yetkileri: hiç işaretlenmemişse boş dizi = rolün varsayılanı.
@@ -57,6 +62,7 @@ export async function yetkiKaydet(_onceki: Sonuc | null, formData: FormData): Pr
     .update({
       kapsam_turu: kapsamTuru,
       kapsam_tipi: kapsamTuru === "tip" ? kapsamTipi : null,
+      kapsam_yetkilisi: kapsamTuru === "yetkili" ? kapsamYetkilisi : null,
       bolge: kapsamTuru === "bolge" ? bolge : (bolge || null),
       yazabilir,
       sayfa_yetkileri: sayfalar,

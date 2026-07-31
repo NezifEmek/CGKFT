@@ -93,6 +93,7 @@ export function gorunurSayfalar(rol: Rol, sayfaYetkileri: unknown): Set<string> 
 
 export const KAPSAM_ETIKET: Record<string, string> = {
   rol: "Rolün varsayılanı",
+  yetkili: "Sorumlusu olduğu şubeler",
   tum: "Bütün şubeler",
   bolge: "Yalnızca kendi bölgesi",
   tip: "Şube tipine göre",
@@ -101,8 +102,10 @@ export const KAPSAM_ETIKET: Record<string, string> = {
 
 export const KAPSAM_ACIKLAMA: Record<string, string> = {
   rol: "Bugüne kadarki davranış: admin ve genel müdür her şubeyi, bölge müdürü kendi bölgesini, denetmen kendisine atanan şubeleri görür.",
+  yetkili:
+    "Şube listesinde “Merkez Yetkilisi” alanı bu kişi olan şubeleri görür. Şube sorumlusu değiştikçe kapsam kendiliğinden güncellenir — tek tek işaretlemeye gerek yok.",
   tum: "Rolünden bağımsız olarak bütün şubeleri görür.",
   bolge: "Profilindeki bölgeye ait şubeleri görür.",
-  tip: "Yalnızca seçilen tipteki şubeleri görür — merkez şubelerden sorumlu kişi için uygundur.",
-  secili: "Aşağıda tek tek işaretlenen şubeleri görür.",
+  tip: "Yalnızca seçilen tipteki şubeleri görür.",
+  secili: "Aşağıda tek tek işaretlenen şubeleri görür — kapsamı sabit kalır.",
 };

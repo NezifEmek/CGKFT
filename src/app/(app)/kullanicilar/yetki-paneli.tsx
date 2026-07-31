@@ -14,6 +14,7 @@ export interface YetkiSube {
   kod: string;
   bolge: string;
   tip: string;
+  yetkili: string;
 }
 
 export interface YetkiVerisi {
@@ -23,12 +24,13 @@ export interface YetkiVerisi {
   bolge: string | null;
   kapsamTuru: KapsamTuru;
   kapsamTipi: string | null;
+  kapsamYetkilisi: string | null;
   yazabilir: boolean;
   sayfaYetkileri: string[];
   seciliSubeIdler: string[];
 }
 
-const KAPSAMLAR: KapsamTuru[] = ["rol", "tum", "bolge", "tip", "secili"];
+const KAPSAMLAR: KapsamTuru[] = ["rol", "yetkili", "tum", "bolge", "tip", "secili"];
 
 export function YetkiPaneli({
   k,
@@ -44,6 +46,11 @@ export function YetkiPaneli({
   const [kapsam, setKapsam] = useState<KapsamTuru>(k.kapsamTuru);
   const [bolge, setBolge] = useState(k.bolge ?? "");
   const [tip, setTip] = useState(k.kapsamTipi ?? "MS");
+  const yetkililer = useMemo(
+    () => [...new Set(subeler.map((s) => s.yetkili).filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr")),
+    [subeler],
+  );
+  const [yetkili, setYetkili] = useState(k.kapsamYetkilisi ?? "");
   const [secili, setSecili] = useState<Set<string>>(new Set(k.sayfaYetkileri));
   const [subeSecim, setSubeSecim] = useState<Set<string>>(new Set(k.seciliSubeIdler));
 
@@ -64,6 +71,8 @@ export function YetkiPaneli({
         return subeler.filter((s) => s.bolge === bolge).length;
       case "tip":
         return subeler.filter((s) => s.tip === tip).length;
+      case "yetkili":
+        return subeler.filter((s) => s.yetkili === yetkili).length;
       case "secili":
         return subeSecim.size;
       default:
@@ -71,7 +80,7 @@ export function YetkiPaneli({
           ? subeler.filter((s) => s.bolge === bolge).length
           : subeSecim.size;
     }
-  }, [kapsam, bolge, tip, subeSecim, subeler, k.rol]);
+  }, [kapsam, bolge, tip, yetkili, subeSecim, subeler, k.rol]);
 
   function sayfaDegistir(anahtar: string, acik: boolean) {
     setSecili((s) => {
@@ -90,6 +99,7 @@ export function YetkiPaneli({
         <input type="hidden" name="kapsam_turu" value={kapsam} />
         <input type="hidden" name="kapsam_tipi" value={tip} />
         <input type="hidden" name="bolge" value={bolge} />
+        <input type="hidden" name="kapsam_yetkilisi" value={yetkili} />
 
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-neutral-500 mb-2">
@@ -129,6 +139,24 @@ export function YetkiPaneli({
                 {bolgeler.map((b) => (
                   <option key={b} value={b}>
                     {b}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {kapsam === "yetkili" && (
+            <label className="block">
+              <span className="block text-xs text-neutral-500 mb-1">Şube sorumlusu</span>
+              <select
+                value={yetkili}
+                onChange={(e) => setYetkili(e.target.value)}
+                className={girdiSinif + " min-w-56"}
+              >
+                <option value="">— seçin —</option>
+                {yetkililer.map((y) => (
+                  <option key={y} value={y}>
+                    {y} ({subeler.filter((s) => s.yetkili === y).length} şube)
                   </option>
                 ))}
               </select>

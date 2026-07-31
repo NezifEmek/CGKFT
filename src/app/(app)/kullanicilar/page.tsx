@@ -74,6 +74,7 @@ export default async function KullanicilarSayfasi() {
         bolge: k.bolge,
         kapsamTuru: k.kapsam_turu ?? "rol",
         kapsamTipi: k.kapsam_tipi ?? null,
+        kapsamYetkilisi: k.kapsam_yetkilisi ?? null,
         yazabilir: k.yazabilir ?? false,
         sayfaYetkileri: Array.isArray(k.sayfa_yetkileri) ? k.sayfa_yetkileri : [],
         seciliSubeIdler: erisimMap.get(k.id) ?? [],
@@ -87,6 +88,7 @@ export default async function KullanicilarSayfasi() {
     kod: s.kod ?? "",
     bolge: s.bolge,
     tip: s.tip,
+    yetkili: s.merkez_yetkilisi ?? "",
   }));
 
   const bolgeler = [

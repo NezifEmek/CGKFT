@@ -5,7 +5,7 @@ export type Rol = "admin" | "genel_mudur" | "bolge_muduru" | "denetmen";
 export type SubeTipi = "MS" | "FR";
 export type FiyatGrubu = "dagitim" | "lojistik";
 
-export type KapsamTuru = "rol" | "tum" | "bolge" | "tip" | "secili";
+export type KapsamTuru = "rol" | "tum" | "bolge" | "tip" | "secili" | "yetkili";
 
 export interface Profile {
   id: string;
@@ -16,6 +16,7 @@ export interface Profile {
   /** 0004 migration'ından önce oluşmuş kayıtlarda bulunmayabilir. */
   kapsam_turu?: KapsamTuru;
   kapsam_tipi?: SubeTipi | null;
+  kapsam_yetkilisi?: string | null;
   yazabilir?: boolean;
   sayfa_yetkileri?: string[];
 }
