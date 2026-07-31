@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { DonemSecici, donemCoz } from "@/components/donem-secici";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay, FiyatModeli } from "@/types/database";
 import {
@@ -33,9 +34,14 @@ function Kart({ baslik, children }: { baslik: string; children: React.ReactNode 
   );
 }
 
-export default async function CiroKarlilikSayfasi() {
+export default async function CiroKarlilikSayfasi({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const profile = await requireProfile();
   const supabase = await createClient();
+  const sp = await searchParams;
 
   const [{ data: subeler }, satislar, { data: aylar }, { data: fiyatModeli }, { data: segmentAyar }] =
     await Promise.all([
@@ -50,7 +56,8 @@ export default async function CiroKarlilikSayfasi() {
 
   const subelerListe = subeler ?? [];
   const gunMap = gunSayisiMap(aylar ?? []);
-  const aktifAylar = aySirala((aylar ?? []).filter((a) => a.yil === CARI_YIL).map((a) => a.ay));
+  const donem = donemCoz(aylar ?? [], CARI_YIL, sp);
+  const aktifAylar = donem.seciliAylar;
   const esikler = (segmentAyar?.esikler ?? []) as Esik[];
 
   if (!fiyatModeli) {
@@ -125,6 +132,8 @@ export default async function CiroKarlilikSayfasi() {
           hesaplanan <b>varsayımsal</b> ciro modeli (gerçek fatura verisi değildir).
         </p>
       </div>
+
+      <DonemSecici donem={donem} />
 
       {duzenleyebilir && <FiyatForm model={fiyatModeli} />}
 

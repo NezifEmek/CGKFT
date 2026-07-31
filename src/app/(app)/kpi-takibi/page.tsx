@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { DonemSecici, donemCoz } from "@/components/donem-secici";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import { aySirala, gunSayisiMap, type Esik } from "@/lib/analytics";
@@ -91,9 +92,14 @@ function Kart({ kart }: { kart: KpiKarti }) {
   );
 }
 
-export default async function KpiTakibiSayfasi() {
+export default async function KpiTakibiSayfasi({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const profile = await requireProfile();
   const supabase = await createClient();
+  const sp = await searchParams;
 
   const [{ data: subeler }, satislar, { data: aylar }, { data: segmentAyar }] = await Promise.all([
     supabase.from("subeler").select("*").returns<Sube[]>(),
@@ -105,7 +111,8 @@ export default async function KpiTakibiSayfasi() {
   ]);
 
   const gunMap = gunSayisiMap(aylar ?? []);
-  const aktifAylar = aySirala((aylar ?? []).filter((a) => a.yil === CARI_YIL).map((a) => a.ay));
+  const donem = donemCoz(aylar ?? [], CARI_YIL, sp);
+  const aktifAylar = donem.seciliAylar;
   const esikler = (segmentAyar?.esikler ?? []) as Esik[];
 
   if (!aktifAylar.length) {
@@ -166,6 +173,8 @@ export default async function KpiTakibiSayfasi() {
           için önceki 3 ay gerekir).
         </p>
       </div>
+
+      <DonemSecici donem={donem} />
 
       {gizlenen > 0 && (
         <p className="text-xs text-neutral-500">

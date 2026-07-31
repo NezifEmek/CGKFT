@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { DonemSecici, donemCoz } from "@/components/donem-secici";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import { aySirala, gunSayisiMap, subeKgOzetleri, kirilimHesapla, kgFmt } from "@/lib/analytics";
@@ -58,9 +59,14 @@ function KirilimTablo({
   );
 }
 
-export default async function BolgeAnaliziSayfasi() {
+export default async function BolgeAnaliziSayfasi({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   await requireProfile();
   const supabase = await createClient();
+  const sp = await searchParams;
 
   const [{ data: subeler }, satislar, { data: aylar }] = await Promise.all([
     supabase.from("subeler").select("*").returns<Sube[]>(),
@@ -71,7 +77,8 @@ export default async function BolgeAnaliziSayfasi() {
   ]);
 
   const gunMap = gunSayisiMap(aylar ?? []);
-  const aktifAylar = aySirala((aylar ?? []).filter((a) => a.yil === CARI_YIL).map((a) => a.ay));
+  const donem = donemCoz(aylar ?? [], CARI_YIL, sp);
+  const aktifAylar = donem.seciliAylar;
   const ozet = subeKgOzetleri(subeler ?? [], satislar, CARI_YIL, aktifAylar, gunMap);
 
   const bolgeSatirlari = kirilimHesapla(subeler ?? [], ozet, (s) => s.bolge);
@@ -86,6 +93,8 @@ export default async function BolgeAnaliziSayfasi() {
           kırılımı.
         </p>
       </div>
+
+      <DonemSecici donem={donem} />
 
       <KirilimTablo baslik="Bölgeler" satirlar={bolgeSatirlari} />
       <KirilimTablo baslik="İller (İlk 20)" satirlar={ilSatirlari} />

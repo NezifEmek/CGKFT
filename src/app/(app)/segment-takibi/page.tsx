@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { DonemSecici, donemCoz } from "@/components/donem-secici";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import { aySirala, gunSayisiMap, aylikSegmentMatrisi, type Esik } from "@/lib/analytics";
@@ -16,9 +17,14 @@ const SEGMENT_RENK: Record<string, string> = {
   E: "#ef4444",
 };
 
-export default async function SegmentTakibiSayfasi() {
+export default async function SegmentTakibiSayfasi({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   await requireProfile();
   const supabase = await createClient();
+  const sp = await searchParams;
 
   const [{ data: subeler }, satislar, { data: aylar }, { data: segmentAyar }] =
     await Promise.all([
@@ -31,7 +37,8 @@ export default async function SegmentTakibiSayfasi() {
     ]);
 
   const gunMap = gunSayisiMap(aylar ?? []);
-  const aktifAylar = aySirala((aylar ?? []).filter((a) => a.yil === CARI_YIL).map((a) => a.ay));
+  const donem = donemCoz(aylar ?? [], CARI_YIL, sp);
+  const aktifAylar = donem.seciliAylar;
   const esikler = (segmentAyar?.esikler ?? []) as Esik[];
 
   const matris = aylikSegmentMatrisi(
@@ -75,6 +82,8 @@ export default async function SegmentTakibiSayfasi() {
           Her şubenin, o aya özel kg/gün ortalamasına göre aylık segment değişimi.
         </p>
       </div>
+
+      <DonemSecici donem={donem} />
 
       <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-x-auto">
         <table className="w-full text-sm">

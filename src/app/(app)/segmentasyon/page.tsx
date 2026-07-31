@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { DonemSecici, donemCoz } from "@/components/donem-secici";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import { aySirala, gunSayisiMap, subeKgOzetleri, segmentBul, kgFmt, type Esik } from "@/lib/analytics";
@@ -7,9 +8,14 @@ import { EsikForm } from "./esik-form";
 
 const CARI_YIL = 2026;
 
-export default async function SegmentasyonSayfasi() {
+export default async function SegmentasyonSayfasi({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const profile = await requireProfile();
   const supabase = await createClient();
+  const sp = await searchParams;
 
   const [{ data: subeler }, satislar, { data: aylar }, { data: segmentAyar }] =
     await Promise.all([
@@ -22,7 +28,8 @@ export default async function SegmentasyonSayfasi() {
     ]);
 
   const gunMap = gunSayisiMap(aylar ?? []);
-  const aktifAylar = aySirala((aylar ?? []).filter((a) => a.yil === CARI_YIL).map((a) => a.ay));
+  const donem = donemCoz(aylar ?? [], CARI_YIL, sp);
+  const aktifAylar = donem.seciliAylar;
   const esikler = (segmentAyar?.esikler ?? []) as Esik[];
   const ozet = subeKgOzetleri(subeler ?? [], satislar, CARI_YIL, aktifAylar, gunMap);
 
@@ -52,6 +59,8 @@ export default async function SegmentasyonSayfasi() {
           {aktifAylar[aktifAylar.length - 1]} kümülatif).
         </p>
       </div>
+
+      <DonemSecici donem={donem} />
 
       {duzenleyebilir && <EsikForm esikler={esikler} baz={segmentAyar?.baz ?? "KÜMÜLATİF"} />}
 

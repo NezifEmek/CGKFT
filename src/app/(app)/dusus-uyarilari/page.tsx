@@ -1,14 +1,20 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { DonemSecici, donemCoz } from "@/components/donem-secici";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import { aySirala, gunSayisiMap, dususUyarilariHesapla, yuzdeFmt } from "@/lib/analytics";
 
 const CARI_YIL = 2026;
 
-export default async function DususUyarilariSayfasi() {
+export default async function DususUyarilariSayfasi({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   await requireProfile();
   const supabase = await createClient();
+  const sp = await searchParams;
 
   const [{ data: subeler }, satislar, { data: aylar }] = await Promise.all([
     supabase.from("subeler").select("*").returns<Sube[]>(),
@@ -19,7 +25,8 @@ export default async function DususUyarilariSayfasi() {
   ]);
 
   const gunMap = gunSayisiMap(aylar ?? []);
-  const aktifAylar = aySirala((aylar ?? []).filter((a) => a.yil === CARI_YIL).map((a) => a.ay));
+  const donem = donemCoz(aylar ?? [], CARI_YIL, sp);
+  const aktifAylar = donem.seciliAylar;
 
   const uyarilar = dususUyarilariHesapla(
     subeler ?? [],
@@ -39,6 +46,8 @@ export default async function DususUyarilariSayfasi() {
           ile birlikte).
         </p>
       </div>
+
+      <DonemSecici donem={donem} />
 
       <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
         <table className="w-full text-sm">
