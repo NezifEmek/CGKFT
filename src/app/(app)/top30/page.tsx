@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
+import { DonemSecici, donemCoz } from "@/components/donem-secici";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import {
   aySirala,
@@ -15,9 +16,14 @@ import {
 const CARI_YIL = 2026;
 const ONCEKI_YIL = 2025;
 
-export default async function Top30Sayfasi() {
+export default async function Top30Sayfasi({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   await requireProfile();
   const supabase = await createClient();
+  const sp = await searchParams;
 
   const [{ data: subeler }, satislar, { data: aylar }, { data: segmentAyar }] =
     await Promise.all([
@@ -30,7 +36,8 @@ export default async function Top30Sayfasi() {
     ]);
 
   const gunMap = gunSayisiMap(aylar ?? []);
-  const aktifAylar = aySirala((aylar ?? []).filter((a) => a.yil === CARI_YIL).map((a) => a.ay));
+  const donem = donemCoz(aylar ?? [], CARI_YIL, sp);
+  const aktifAylar = donem.seciliAylar;
   const esikler = (segmentAyar?.esikler ?? []) as Esik[];
 
   const ozetCari = subeKgOzetleri(subeler ?? [], satislar, CARI_YIL, aktifAylar, gunMap);
@@ -72,11 +79,15 @@ export default async function Top30Sayfasi() {
     .slice(0, 30);
 
   return (
-    <div>
-      <h1 className="text-xl font-semibold mb-1">Top 30 Şube</h1>
-      <p className="text-sm text-neutral-500 mb-6">
-        {aktifAylar[0]} – {sonAy} kümülatif kg&apos;a göre en yüksek satış yapan 30 şube.
-      </p>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-xl font-semibold mb-1">Top 30 Şube</h1>
+        <p className="text-sm text-neutral-500">
+          Seçilen dönemde kümülatif kg&apos;a göre en yüksek satış yapan 30 şube.
+        </p>
+      </div>
+
+      <DonemSecici donem={donem} />
 
       <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
         <table className="w-full text-sm">
