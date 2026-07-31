@@ -44,10 +44,19 @@ export default async function YoyKarsilastirmaSayfasi({
   const bitisIdx = Math.max(baslangicIdx, tumAylar.indexOf(bitis));
   const secilenAylar = tumAylar.slice(baslangicIdx, bitisIdx + 1);
 
+  const tip = sp.tip ?? "";
+  const yetkili = sp.yetkili ?? "";
+  const yon = sp.yon ?? "";
+
   let scopedSubeler = subeler ?? [];
   if (scope === "bolge" && deger) scopedSubeler = scopedSubeler.filter((s) => s.bolge === deger);
   else if (scope === "il" && deger) scopedSubeler = scopedSubeler.filter((s) => s.il === deger);
   else if (scope === "sube" && deger) scopedSubeler = scopedSubeler.filter((s) => s.id === deger);
+
+  // Tip ve bölge sorumlusu filtreleri şube kümesini daralttığı için özet
+  // kartlarına da yansır; yön filtresi ise satır bazlı, aşağıda uygulanıyor.
+  if (tip) scopedSubeler = scopedSubeler.filter((s) => s.tip === tip);
+  if (yetkili) scopedSubeler = scopedSubeler.filter((s) => (s.merkez_yetkilisi ?? "") === yetkili);
 
   const ozetCari = subeKgOzetleri(scopedSubeler, satislar, CARI_YIL, secilenAylar, gunMap);
   const ozetOnceki = subeKgOzetleri(scopedSubeler, satislar, ONCEKI_YIL, secilenAylar, gunMap);
@@ -56,8 +65,11 @@ export default async function YoyKarsilastirmaSayfasi({
 
   const bolgeler = [...new Set((subeler ?? []).map((s) => s.bolge))].sort();
   const iller = [...new Set((subeler ?? []).map((s) => s.il).filter(Boolean))].sort();
+  const yetkililer = [
+    ...new Set((subeler ?? []).map((s) => s.merkez_yetkilisi ?? "").filter(Boolean)),
+  ].sort((a, b) => a.localeCompare(b, "tr"));
 
-  const subeSatirlari = scopedSubeler
+  const tumSatirlar = scopedSubeler
     .map((s) => {
       const a = ozetCari.get(s.id);
       const b = ozetOnceki.get(s.id);
@@ -69,6 +81,19 @@ export default async function YoyKarsilastirmaSayfasi({
     })
     .filter((r): r is NonNullable<typeof r> => r !== null)
     .sort((x, y) => y.cari - x.cari);
+
+  // Yön filtresi: yalnızca düşenler / yalnızca artanlar. Fark tam sıfır olan
+  // şubeler ikisine de girmez.
+  const subeSatirlari =
+    yon === "dusen"
+      ? tumSatirlar.filter((r) => r.fark < 0)
+      : yon === "artan"
+        ? tumSatirlar.filter((r) => r.fark > 0)
+        : tumSatirlar;
+
+  const yonToplamCari = subeSatirlari.reduce((t, r) => t + r.cari, 0);
+  const yonToplamOnceki = subeSatirlari.reduce((t, r) => t + r.onceki, 0);
+  const yonFark = yonToplamCari - yonToplamOnceki;
 
   return (
     <div className="space-y-6">
@@ -111,6 +136,31 @@ export default async function YoyKarsilastirmaSayfasi({
             {tumAylar.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
+        <div>
+          <label className="block text-xs text-neutral-500 mb-1">Şube tipi</label>
+          <select name="tip" defaultValue={tip} className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2 py-1.5 text-sm">
+            <option value="">Tümü</option>
+            <option value="MS">Merkez Şube (MŞ)</option>
+            <option value="FR">Franchise (FR)</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-neutral-500 mb-1">Bölge sorumlusu</label>
+          <select name="yetkili" defaultValue={yetkili} className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2 py-1.5 text-sm min-w-40">
+            <option value="">Tümü</option>
+            {yetkililer.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-neutral-500 mb-1">Yön</label>
+          <select name="yon" defaultValue={yon} className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2 py-1.5 text-sm">
+            <option value="">Hepsi</option>
+            <option value="dusen">Yalnızca düşenler</option>
+            <option value="artan">Yalnızca artanlar</option>
+          </select>
+        </div>
         <label className="flex items-center gap-2 text-sm pb-1.5">
           <input type="checkbox" name="lfl" value="1" defaultChecked={lfl} />
           LFL (sadece her iki yılda da veri olan şubeler)
@@ -144,6 +194,25 @@ export default async function YoyKarsilastirmaSayfasi({
           </div>
         </div>
       </div>
+
+      {yon && (
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/60 px-4 py-3 text-sm flex flex-wrap gap-x-6 gap-y-1">
+          <span className="font-medium">
+            {yon === "dusen" ? "Yalnızca düşenler" : "Yalnızca artanlar"}: {subeSatirlari.length}{" "}
+            şube
+          </span>
+          <span className="text-neutral-500">
+            {CARI_YIL}: <b>{kgFmt(yonToplamCari)}</b> · {ONCEKI_YIL}:{" "}
+            <b>{kgFmt(yonToplamOnceki)}</b>
+          </span>
+          <span className={yonFark >= 0 ? "text-emerald-600" : "text-red-600"}>
+            Toplam etki: <b>{kgFmt(yonFark)}</b>
+          </span>
+          <span className="text-[11px] text-neutral-400">
+            Yukarıdaki kartlar yön filtresinden etkilenmez, seçilen kapsamın tamamını gösterir.
+          </span>
+        </div>
+      )}
 
       <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
         <table className="w-full text-sm">
