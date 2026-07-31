@@ -3,6 +3,8 @@ import { requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Profile, Sube } from "@/types/database";
+import { pozisyonlariNormalize } from "@/lib/dokuman";
+import { kendisiVeAstlari } from "@/lib/organizasyon";
 import { KullaniciEkleForm } from "./kullanici-ekle-form";
 import { KullaniciSatiri, type KullaniciSatiriVerisi } from "./kullanici-satiri";
 
@@ -75,12 +77,27 @@ export default async function KullanicilarSayfasi() {
         kapsamTuru: k.kapsam_turu ?? "rol",
         kapsamTipi: k.kapsam_tipi ?? null,
         kapsamYetkilisi: k.kapsam_yetkilisi ?? null,
+        pozisyonId: k.pozisyon_id ?? null,
         yazabilir: k.yazabilir ?? false,
         sayfaYetkileri: Array.isArray(k.sayfa_yetkileri) ? k.sayfa_yetkileri : [],
         seciliSubeIdler: erisimMap.get(k.id) ?? [],
       },
     };
   });
+
+  // Pozisyon listesi + her pozisyonun ast sayısı (yetki ekranında gösteriliyor)
+  const { data: dokData } = await supabase
+    .from("dokuman_ayarlari")
+    .select("pozisyonlar")
+    .eq("id", 1)
+    .maybeSingle<{ pozisyonlar: unknown }>();
+  const tumPozisyonlar = pozisyonlariNormalize(dokData?.pozisyonlar);
+  const yetkiPozisyonlar = tumPozisyonlar.map((p) => ({
+    id: p.id,
+    unvan: p.unvan,
+    adSoyad: p.adSoyad,
+    astSayisi: kendisiVeAstlari(tumPozisyonlar, p.id).size - 1,
+  }));
 
   const yetkiSubeler = (subeler ?? []).map((s) => ({
     id: s.id,
@@ -133,6 +150,7 @@ export default async function KullanicilarSayfasi() {
                 k={k}
                 bolgeler={bolgeler}
                 subeler={yetkiSubeler}
+                pozisyonlar={yetkiPozisyonlar}
                 benMiyim={k.id === profile.id}
               />
             ))}

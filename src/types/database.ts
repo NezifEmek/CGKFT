@@ -17,6 +17,8 @@ export interface Profile {
   kapsam_turu?: KapsamTuru;
   kapsam_tipi?: SubeTipi | null;
   kapsam_yetkilisi?: string | null;
+  /** dokuman_ayarlari.pozisyonlar içindeki pozisyon id'si — kişisel görünürlüğü belirler. */
+  pozisyon_id?: string | null;
   yazabilir?: boolean;
   sayfa_yetkileri?: string[];
 }

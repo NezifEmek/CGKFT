@@ -27,12 +27,15 @@ export function PrimArayuz({
   aylar,
   ayarlar,
   duzenlenebilir,
+  gorunurKisiler,
 }: {
   subeler: Sube[];
   satislar: AylikSatis[];
   aylar: AyOgesi[];
   ayarlar: PrimAyarlari;
   duzenlenebilir: boolean;
+  /** null = sınır yok (admin). Doluysa yalnızca bu kişilerin satırı gösterilir. */
+  gorunurKisiler: string[] | null;
 }) {
   const [secili, setSecili] = useState(() => {
     const son = aylar[aylar.length - 1];
@@ -52,8 +55,17 @@ export function PrimArayuz({
     [subeler, satislar, yil, ay, ayarlar],
   );
 
-  const personel = useMemo(() => primPersonelSatirlari(h, ayarlar), [h, ayarlar]);
-  const toplamPrim = personel.reduce((t, p) => t + p.prim, 0);
+  const tumPersonel = useMemo(() => primPersonelSatirlari(h, ayarlar), [h, ayarlar]);
+  // Toplam her zaman TÜM personel üzerinden — kişi kendi satırını görmese de
+  // havuzun tamamının ne kadar dağıtıldığı doğru görünsün.
+  const toplamPrim = tumPersonel.reduce((t, p) => t + p.prim, 0);
+  const trU = (s: string) => s.replace(/i/g, "İ").toLocaleUpperCase("tr").trim();
+  const personel = useMemo(() => {
+    if (!gorunurKisiler) return tumPersonel;
+    const kume = new Set(gorunurKisiler.map(trU));
+    return tumPersonel.filter((p) => kume.has(trU(p.ad)));
+  }, [tumPersonel, gorunurKisiler]);
+  const gizlenen = tumPersonel.length - personel.length;
 
   const bolgeKartlari = [
     { ad: "Şirket Geneli", kg: h.toplamKg, hedef: h.toplamHedef, asim: h.toplamAsim },
@@ -447,6 +459,12 @@ export function PrimArayuz({
               * Bir bölge sorumlusunun tutarı düşükse kendi bölgesinde aşım olmamış, yalnızca
               şirket genel hedefinden aldığı pay gösteriliyor demektir.
             </p>
+            {gizlenen > 0 && (
+              <p className="text-[11px] text-neutral-400 mt-1">
+                Bu listede yalnızca siz ve astlarınız görünüyor; {gizlenen} kişinin satırı
+                gizlendi. TOPLAM satırı havuzun tamamını gösterir.
+              </p>
+            )}
           </div>
         </>
       )}

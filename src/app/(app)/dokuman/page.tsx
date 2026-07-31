@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { pozisyonlariNormalize } from "@/lib/dokuman";
+import { gorunurPozisyonlar } from "@/lib/organizasyon";
 import { DokumanArayuz } from "./dokuman-arayuz";
 
 export default async function DokumanSayfasi() {
@@ -15,7 +16,15 @@ export default async function DokumanSayfasi() {
 
   // Tablo henüz oluşturulmadıysa ekran çökmesin — koddaki varsayılanlar gösterilir.
   const tabloYok = Boolean(error);
-  const pozisyonlar = pozisyonlariNormalize(data?.pozisyonlar);
+  const tumPozisyonlar = pozisyonlariNormalize(data?.pozisyonlar);
+
+  // Admin dışındaki kullanıcı yalnızca kendi görev tanımını ve astlarınınkini
+  // görür. Hiyerarşi görev tanımlarındaki "Bağlı Olduğu Kişi" alanından
+  // türetiliyor, ayrıca tanımlanmıyor.
+  const gorunur = gorunurPozisyonlar(profile.rol, profile.pozisyon_id, tumPozisyonlar);
+  const pozisyonlar = gorunur ? tumPozisyonlar.filter((p) => gorunur.has(p.id)) : tumPozisyonlar;
+  const kisitliMi = gorunur !== null;
+
   const duzenlenebilir =
     !tabloYok && (profile.rol === "admin" || profile.rol === "genel_mudur");
 
@@ -25,6 +34,7 @@ export default async function DokumanSayfasi() {
         <h1 className="text-xl font-semibold mb-1">Doküman Yönetimi</h1>
         <p className="text-sm text-neutral-500">
           Görev tanımları, KPI setleri ve prim bağlantıları · {pozisyonlar.length} pozisyon
+          {kisitliMi ? ` (kendiniz ve astlarınız)` : ""}
           {data?.updated_at ? ` · son güncelleme ${data.updated_at.slice(0, 10)}` : ""}
         </p>
       </div>
@@ -39,7 +49,14 @@ export default async function DokumanSayfasi() {
         </div>
       )}
 
-      <DokumanArayuz pozisyonlar={pozisyonlar} duzenlenebilir={duzenlenebilir} />
+      {kisitliMi && !pozisyonlar.length ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300">
+          Hesabınıza bir <b>pozisyon</b> atanmamış, bu yüzden görev tanımı gösterilemiyor.
+          Kullanıcılar ekranından hesabınıza pozisyon atanması gerekiyor.
+        </div>
+      ) : (
+        <DokumanArayuz pozisyonlar={pozisyonlar} duzenlenebilir={duzenlenebilir} />
+      )}
     </div>
   );
 }

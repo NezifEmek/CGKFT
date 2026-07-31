@@ -4,6 +4,8 @@ import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import { aySirala, gunSayisiMap, type Esik } from "@/lib/analytics";
 import { kpiKartlariHesapla, type KpiHucre, type KpiKarti } from "@/lib/kpi";
+import { pozisyonlariNormalize } from "@/lib/dokuman";
+import { gorunurPozisyonlar } from "@/lib/organizasyon";
 
 const CARI_YIL = 2026;
 
@@ -90,7 +92,7 @@ function Kart({ kart }: { kart: KpiKarti }) {
 }
 
 export default async function KpiTakibiSayfasi() {
-  await requireProfile();
+  const profile = await requireProfile();
   const supabase = await createClient();
 
   const [{ data: subeler }, satislar, { data: aylar }, { data: segmentAyar }] = await Promise.all([
@@ -117,7 +119,7 @@ export default async function KpiTakibiSayfasi() {
     );
   }
 
-  const kartlar = kpiKartlariHesapla(
+  const tumKartlar = kpiKartlariHesapla(
     subeler ?? [],
     satislar,
     CARI_YIL,
@@ -125,6 +127,34 @@ export default async function KpiTakibiSayfasi() {
     gunMap,
     esikler,
   );
+
+  // Admin dışındaki kullanıcı yalnızca kendi kartını ve astlarınınkini görür.
+  // ŞİRKET GENELİ herkese açık kalır: şirket hedefinin tutup tutmadığı
+  // herkesi ilgilendiriyor ve kişisel bir bilgi değil.
+  const { data: dokData } = await supabase
+    .from("dokuman_ayarlari")
+    .select("pozisyonlar")
+    .eq("id", 1)
+    .maybeSingle<{ pozisyonlar: unknown }>();
+  const pozisyonlar = pozisyonlariNormalize(dokData?.pozisyonlar);
+  const gorunurPoz = gorunurPozisyonlar(profile.rol, profile.pozisyon_id, pozisyonlar);
+
+  const trU = (s: string) => s.replace(/i/g, "İ").toLocaleUpperCase("tr").trim();
+  const kisiAdlari = gorunurPoz
+    ? new Set(
+        pozisyonlar
+          .filter((p) => gorunurPoz.has(p.id))
+          .map((p) => trU(p.adSoyad || ""))
+          .filter(Boolean),
+      )
+    : null;
+
+  const kartlar = kisiAdlari
+    ? tumKartlar.filter(
+        (k) => trU(k.baslik) === "ŞİRKET GENELİ" || kisiAdlari.has(trU(k.baslik)),
+      )
+    : tumKartlar;
+  const gizlenen = tumKartlar.length - kartlar.length;
 
   return (
     <div className="space-y-4">
@@ -137,9 +167,23 @@ export default async function KpiTakibiSayfasi() {
         </p>
       </div>
 
+      {gizlenen > 0 && (
+        <p className="text-xs text-neutral-500">
+          Kendinize ve astlarınıza ait kartlar ile şirket geneli gösteriliyor; {gizlenen} kart
+          gizlendi.
+        </p>
+      )}
+
       {kartlar.map((k) => (
         <Kart key={k.baslik} kart={k} />
       ))}
+
+      {!kartlar.length && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300">
+          Size ait bir KPI kartı yok. Hesabınıza organizasyondaki pozisyon atanmamış olabilir —
+          Kullanıcılar ekranından atanabilir.
+        </div>
+      )}
     </div>
   );
 }

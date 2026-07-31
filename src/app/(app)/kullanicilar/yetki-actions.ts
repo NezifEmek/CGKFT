@@ -63,6 +63,7 @@ export async function yetkiKaydet(_onceki: Sonuc | null, formData: FormData): Pr
       kapsam_turu: kapsamTuru,
       kapsam_tipi: kapsamTuru === "tip" ? kapsamTipi : null,
       kapsam_yetkilisi: kapsamTuru === "yetkili" ? kapsamYetkilisi : null,
+      pozisyon_id: String(formData.get("pozisyon_id") || "").trim() || null,
       bolge: kapsamTuru === "bolge" ? bolge : (bolge || null),
       yazabilir,
       sayfa_yetkileri: sayfalar,

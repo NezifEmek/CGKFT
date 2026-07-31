@@ -167,3 +167,73 @@ export function organizasyonKur(pozisyonlar: Pozisyon[]): OrgSemasi {
 export function dugumSay(d: OrgDugum): number {
   return 1 + d.cocuklar.reduce((t, c) => t + dugumSay(c), 0);
 }
+
+/**
+ * Bir pozisyonun KENDİSİ + BÜTÜN ASTLARI (alt dalların tamamı).
+ *
+ * "Kişi kendi KPI'ını, primini ve görev tanımını görsün, astlarınınkini de
+ * görsün" kuralının karşılığı. Hiyerarşi zaten görev tanımlarındaki
+ * "Bağlı Olduğu Kişi" alanından türetildiği için ayrıca tanımlanmıyor —
+ * organizasyon şeması değiştikçe görünürlük de kendiliğinden değişir.
+ *
+ * Genel müdür ağacın kökü olduğu için onun astları herkestir; yani aynı
+ * kural üst kademede "her şeyi gör" anlamına gelir, ayrı bir istisna
+ * yazmaya gerek kalmaz.
+ */
+export function kendisiVeAstlari(pozisyonlar: Pozisyon[], pozisyonId: string): Set<string> {
+  const { kokler } = organizasyonKur(pozisyonlar);
+
+  const topla = (d: OrgDugum, kume: Set<string>) => {
+    kume.add(d.id);
+    d.cocuklar.forEach((c) => topla(c, kume));
+  };
+
+  const ara = (d: OrgDugum): OrgDugum | null => {
+    if (d.id === pozisyonId) return d;
+    for (const c of d.cocuklar) {
+      const b = ara(c);
+      if (b) return b;
+    }
+    return null;
+  };
+
+  for (const k of kokler) {
+    const bulunan = ara(k);
+    if (bulunan) {
+      const kume = new Set<string>();
+      topla(bulunan, kume);
+      return kume;
+    }
+  }
+  // Ağaçta yoksa en azından kendisi görünsün.
+  return new Set(pozisyonId ? [pozisyonId] : []);
+}
+
+/**
+ * Kullanıcının görebileceği pozisyonlar.
+ * Admin her şeyi görür; diğerleri kendisi + astları. Pozisyonu atanmamış
+ * kullanıcı hiçbir kişisel kayıt görmez (boş küme) — yanlışlıkla herkesin
+ * primini göstermektense hiç göstermemek daha güvenli.
+ */
+export function gorunurPozisyonlar(
+  rol: string,
+  pozisyonId: string | null | undefined,
+  pozisyonlar: Pozisyon[],
+): Set<string> | null {
+  if (rol === "admin") return null; // null = sınır yok
+  if (!pozisyonId) return new Set();
+  return kendisiVeAstlari(pozisyonlar, pozisyonId);
+}
+
+/** profiles.ad_soyad ile pozisyon.adSoyad arasında Türkçe duyarlı eşleşme. */
+export function pozisyonTahmin(adSoyad: string, pozisyonlar: Pozisyon[]): string | null {
+  const a = trUpper((adSoyad || "").trim());
+  if (!a) return null;
+  const tam = pozisyonlar.find((p) => trUpper((p.adSoyad || "").trim()) === a);
+  if (tam) return tam.id;
+  const icerir = pozisyonlar.find((p) => {
+    const b = trUpper((p.adSoyad || "").trim());
+    return b.length > 4 && (b.includes(a) || a.includes(b));
+  });
+  return icerir?.id ?? null;
+}

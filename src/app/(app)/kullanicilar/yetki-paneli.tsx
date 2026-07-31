@@ -25,6 +25,7 @@ export interface YetkiVerisi {
   kapsamTuru: KapsamTuru;
   kapsamTipi: string | null;
   kapsamYetkilisi: string | null;
+  pozisyonId: string | null;
   yazabilir: boolean;
   sayfaYetkileri: string[];
   seciliSubeIdler: string[];
@@ -32,15 +33,24 @@ export interface YetkiVerisi {
 
 const KAPSAMLAR: KapsamTuru[] = ["rol", "yetkili", "tum", "bolge", "tip", "secili"];
 
+export interface YetkiPozisyon {
+  id: string;
+  unvan: string;
+  adSoyad: string;
+  astSayisi: number;
+}
+
 export function YetkiPaneli({
   k,
   bolgeler,
   subeler,
+  pozisyonlar,
   benMiyim,
 }: {
   k: YetkiVerisi;
   bolgeler: string[];
   subeler: YetkiSube[];
+  pozisyonlar: YetkiPozisyon[];
   benMiyim: boolean;
 }) {
   const [kapsam, setKapsam] = useState<KapsamTuru>(k.kapsamTuru);
@@ -51,6 +61,7 @@ export function YetkiPaneli({
     [subeler],
   );
   const [yetkili, setYetkili] = useState(k.kapsamYetkilisi ?? "");
+  const [pozisyon, setPozisyon] = useState(k.pozisyonId ?? "");
   const [secili, setSecili] = useState<Set<string>>(new Set(k.sayfaYetkileri));
   const [subeSecim, setSubeSecim] = useState<Set<string>>(new Set(k.seciliSubeIdler));
 
@@ -101,7 +112,38 @@ export function YetkiPaneli({
         <input type="hidden" name="bolge" value={bolge} />
         <input type="hidden" name="kapsam_yetkilisi" value={yetkili} />
 
+        {/* Kişisel görünürlük — KPI, prim ve görev tanımı */}
         <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-neutral-500 mb-2">
+            Organizasyondaki yeri
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="block">
+              <span className="block text-xs text-neutral-500 mb-1">Görev tanımı / pozisyon</span>
+              <select
+                name="pozisyon_id"
+                value={pozisyon}
+                onChange={(e) => setPozisyon(e.target.value)}
+                className={girdiSinif + " min-w-72"}
+              >
+                <option value="">— atanmamış —</option>
+                {pozisyonlar.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.adSoyad ? `${p.adSoyad} — ` : ""}{p.unvan}
+                    {p.astSayisi > 0 ? ` (+${p.astSayisi} ast)` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-[11px] text-neutral-500 pb-1.5 max-w-md">
+              Admin olmayan kullanıcı <b>kendi</b> KPI&apos;ını, primini ve görev tanımını görür —
+              <b> astlarınınkini de</b>. Astlar, görev tanımlarındaki &quot;Bağlı Olduğu Kişi&quot;
+              alanından otomatik çıkarılır. Atanmamışsa kişisel kayıtların hiçbirini göremez.
+            </p>
+          </div>
+        </div>
+
+        <div className="pt-3 border-t border-neutral-200 dark:border-neutral-700">
           <p className="text-xs font-bold uppercase tracking-wide text-neutral-500 mb-2">
             Hangi şubeleri görür
           </p>

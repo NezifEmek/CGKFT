@@ -10,7 +10,7 @@ import {
   kullaniciSil,
 } from "./yonetim-actions";
 import { ROL_ETIKET, type Rol } from "@/types/database";
-import { YetkiPaneli, type YetkiVerisi, type YetkiSube } from "./yetki-paneli";
+import { YetkiPaneli, type YetkiVerisi, type YetkiSube, type YetkiPozisyon } from "./yetki-paneli";
 
 const girdiSinif =
   "rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2.5 py-1.5 text-sm";
@@ -45,11 +45,13 @@ export function KullaniciSatiri({
   k,
   bolgeler,
   subeler,
+  pozisyonlar,
   benMiyim,
 }: {
   k: KullaniciSatiriVerisi;
   bolgeler: string[];
   subeler: YetkiSube[];
+  pozisyonlar: YetkiPozisyon[];
   benMiyim: boolean;
 }) {
   const [acik, setAcik] = useState(false);
@@ -308,6 +310,7 @@ export function KullaniciSatiri({
                 k={k.yetki}
                 bolgeler={bolgeler}
                 subeler={subeler}
+                pozisyonlar={pozisyonlar}
                 benMiyim={benMiyim}
               />
             </div>

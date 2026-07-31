@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import { primAyarlariNormalize } from "@/lib/dokuman";
+import { primAyarlariNormalize, pozisyonlariNormalize } from "@/lib/dokuman";
+import { gorunurPozisyonlar } from "@/lib/organizasyon";
 import { aySirala } from "@/lib/analytics";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
@@ -28,6 +29,25 @@ export default async function PrimHakedisSayfasi() {
 
   const tabloYok = Boolean(ayarSonuc.error);
   const ayarlar = primAyarlariNormalize(ayarSonuc.data?.prim_ayarlari);
+
+  // Admin dışındaki kullanıcı kişi başı prim tablosunda yalnızca kendisini ve
+  // astlarını görür. Havuzlar ve şirket toplamları herkese açık kalır —
+  // hedefin tutup tutmadığını görmek herkesin işi.
+  const { data: dokData } = await supabase
+    .from("dokuman_ayarlari")
+    .select("pozisyonlar")
+    .eq("id", 1)
+    .maybeSingle<{ pozisyonlar: unknown }>();
+  const pozisyonlar = pozisyonlariNormalize(dokData?.pozisyonlar);
+  const gorunurPoz = gorunurPozisyonlar(profile.rol, profile.pozisyon_id, pozisyonlar);
+  const gorunurKisiAdlari = gorunurPoz
+    ? new Set(
+        pozisyonlar
+          .filter((p) => gorunurPoz.has(p.id))
+          .map((p) => (p.adSoyad || "").trim())
+          .filter(Boolean),
+      )
+    : null;
 
   // Yıl içinde takvim sırası, yıllar arasında artan sıra.
   const yillar = [...new Set((aylar ?? []).map((a) => a.yil))].sort((x, y) => x - y);
@@ -65,6 +85,7 @@ export default async function PrimHakedisSayfasi() {
           aylar={ayListesi}
           ayarlar={ayarlar}
           duzenlenebilir={duzenlenebilir}
+          gorunurKisiler={gorunurKisiAdlari ? [...gorunurKisiAdlari] : null}
         />
       ) : (
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300">
