@@ -225,14 +225,36 @@ export function gorunurPozisyonlar(
   return kendisiVeAstlari(pozisyonlar, pozisyonId);
 }
 
-/** profiles.ad_soyad ile pozisyon.adSoyad arasında Türkçe duyarlı eşleşme. */
+/**
+ * profiles.ad_soyad ile pozisyon.adSoyad eşleşmesi.
+ *
+ * Türkçe karakterler ASCII'ye indirilir: iki kaynak aynı kişiyi farklı
+ * yazabiliyor ("Ümran Balci" ↔ "Ümran BALCI", "Hüseyin Akı" ↔ "Hüseyin AKİ").
+ * i/ı ve İ/I ayrımına takılmamak için hepsi I'ya çevriliyor.
+ */
+function asciiKatla(s: string): string {
+  return s
+    .toLocaleUpperCase("tr")
+    .replace(/[İIıi]/g, "I")
+    .replace(/Ö/g, "O")
+    .replace(/Ü/g, "U")
+    .replace(/Ş/g, "S")
+    .replace(/Ç/g, "C")
+    .replace(/Ğ/g, "G")
+    .replace(/[^A-Z0-9]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function pozisyonTahmin(adSoyad: string, pozisyonlar: Pozisyon[]): string | null {
-  const a = trUpper((adSoyad || "").trim());
+  const a = asciiKatla(adSoyad || "");
   if (!a) return null;
-  const tam = pozisyonlar.find((p) => trUpper((p.adSoyad || "").trim()) === a);
+
+  const tam = pozisyonlar.find((p) => asciiKatla(p.adSoyad || "") === a);
   if (tam) return tam.id;
+
   const icerir = pozisyonlar.find((p) => {
-    const b = trUpper((p.adSoyad || "").trim());
+    const b = asciiKatla(p.adSoyad || "");
     return b.length > 4 && (b.includes(a) || a.includes(b));
   });
   return icerir?.id ?? null;
