@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
-import { DonemSecici, donemCoz } from "@/components/donem-secici";
+import { DonemSecici, donemCoz, subeleriSuz, kapananlarGoruntulensin } from "@/components/donem-secici";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import {
   aySirala,
@@ -38,15 +38,19 @@ export default async function Top30Sayfasi({
   const gunMap = gunSayisiMap(aylar ?? []);
   const donem = donemCoz(aylar ?? [], CARI_YIL, sp);
   const aktifAylar = donem.seciliAylar;
+  // Kapanan şubeler raporlarda varsayılan gizli; anahtarla açılabiliyor.
+  const tumSubeler = subeler ?? [];
+  const aktifSubeler = subeleriSuz(tumSubeler, sp);
+  const kapananSayisi = tumSubeler.length - aktifSubeler.length;
   const esikler = (segmentAyar?.esikler ?? []) as Esik[];
 
-  const ozetCari = subeKgOzetleri(subeler ?? [], satislar, CARI_YIL, aktifAylar, gunMap);
-  const ozetOnceki = subeKgOzetleri(subeler ?? [], satislar, ONCEKI_YIL, aktifAylar, gunMap);
+  const ozetCari = subeKgOzetleri(aktifSubeler, satislar, CARI_YIL, aktifAylar, gunMap);
+  const ozetOnceki = subeKgOzetleri(aktifSubeler, satislar, ONCEKI_YIL, aktifAylar, gunMap);
 
   const sonAy = aktifAylar[aktifAylar.length - 1];
   const oncekiAy = aktifAylar[aktifAylar.length - 2];
 
-  const satirlar = (subeler ?? [])
+  const satirlar = (aktifSubeler)
     .map((sube) => {
       const ozet = ozetCari.get(sube.id);
       const oncekiYilOzet = ozetOnceki.get(sube.id);
@@ -87,7 +91,11 @@ export default async function Top30Sayfasi({
         </p>
       </div>
 
-      <DonemSecici donem={donem} />
+      <DonemSecici
+        donem={donem}
+        kapananGoster={kapananlarGoruntulensin(sp)}
+        kapananSayisi={kapananSayisi}
+      />
 
       <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
         <table className="w-full text-sm">

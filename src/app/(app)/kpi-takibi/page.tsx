@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import { DonemSecici, donemCoz } from "@/components/donem-secici";
+import { DonemSecici, donemCoz, subeleriSuz, kapananlarGoruntulensin } from "@/components/donem-secici";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import { aySirala, gunSayisiMap, type Esik } from "@/lib/analytics";
@@ -113,6 +113,10 @@ export default async function KpiTakibiSayfasi({
   const gunMap = gunSayisiMap(aylar ?? []);
   const donem = donemCoz(aylar ?? [], CARI_YIL, sp);
   const aktifAylar = donem.seciliAylar;
+  // Kapanan şubeler raporlarda varsayılan gizli; anahtarla açılabiliyor.
+  const tumSubeler = subeler ?? [];
+  const aktifSubeler = subeleriSuz(tumSubeler, sp);
+  const kapananSayisi = tumSubeler.length - aktifSubeler.length;
   const esikler = (segmentAyar?.esikler ?? []) as Esik[];
 
   if (!aktifAylar.length) {
@@ -127,7 +131,7 @@ export default async function KpiTakibiSayfasi({
   }
 
   const tumKartlar = kpiKartlariHesapla(
-    subeler ?? [],
+    aktifSubeler,
     satislar,
     CARI_YIL,
     aktifAylar,
@@ -174,7 +178,11 @@ export default async function KpiTakibiSayfasi({
         </p>
       </div>
 
-      <DonemSecici donem={donem} />
+      <DonemSecici
+        donem={donem}
+        kapananGoster={kapananlarGoruntulensin(sp)}
+        kapananSayisi={kapananSayisi}
+      />
 
       {gizlenen > 0 && (
         <p className="text-xs text-neutral-500">

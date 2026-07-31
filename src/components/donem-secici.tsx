@@ -48,6 +48,22 @@ export function donemCoz(
   };
 }
 
+/**
+ * Kapanan (aktif = false) şubeler raporlarda VARSAYILAN OLARAK GİZLİ.
+ * Gereksiz kalabalık yapıyorlardı; isteyen "kapananları da göster" ile açar.
+ */
+export function kapananlarGoruntulensin(sp: Record<string, string | undefined>): boolean {
+  return sp.kapanan === "1";
+}
+
+/** Kapanan şubeleri eler (istenmedikçe). Sayfalar tek satırda kullanır. */
+export function subeleriSuz<T extends { aktif?: boolean }>(
+  subeler: T[],
+  sp: Record<string, string | undefined>,
+): T[] {
+  return kapananlarGoruntulensin(sp) ? subeler : subeler.filter((s) => s.aktif !== false);
+}
+
 const gir =
   "rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2 py-1.5 text-sm";
 
@@ -59,10 +75,15 @@ export function DonemSecici({
   donem,
   ekstra,
   aciklama,
+  kapananGoster,
+  kapananSayisi,
 }: {
   donem: DonemSecimi;
   ekstra?: Record<string, string | undefined>;
   aciklama?: string;
+  /** undefined ise kapanan şube anahtarı hiç gösterilmez (şube listesi olmayan ekranlar). */
+  kapananGoster?: boolean;
+  kapananSayisi?: number;
 }) {
   if (!donem.tumAylar.length) return null;
 
@@ -91,6 +112,16 @@ export function DonemSecici({
           ))}
         </select>
       </div>
+      {kapananGoster !== undefined && (
+        <label className="flex items-center gap-2 text-sm pb-2">
+          <input type="checkbox" name="kapanan" value="1" defaultChecked={kapananGoster} />
+          Kapanan şubeleri de göster
+          {kapananSayisi ? (
+            <span className="text-xs text-neutral-400">({kapananSayisi})</span>
+          ) : null}
+        </label>
+      )}
+
       <button
         type="submit"
         className="rounded-md bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 px-4 py-2 text-sm font-medium"

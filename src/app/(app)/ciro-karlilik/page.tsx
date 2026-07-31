@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import { DonemSecici, donemCoz } from "@/components/donem-secici";
+import { DonemSecici, donemCoz, subeleriSuz, kapananlarGoruntulensin } from "@/components/donem-secici";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay, FiyatModeli } from "@/types/database";
 import {
@@ -54,10 +54,14 @@ export default async function CiroKarlilikSayfasi({
       supabase.from("segment_ayarlari").select("*").eq("id", 1).single(),
     ]);
 
-  const subelerListe = subeler ?? [];
   const gunMap = gunSayisiMap(aylar ?? []);
   const donem = donemCoz(aylar ?? [], CARI_YIL, sp);
   const aktifAylar = donem.seciliAylar;
+  // Kapanan şubeler raporlarda varsayılan gizli; anahtarla açılabiliyor.
+  const tumSubeler = subeler ?? [];
+  const aktifSubeler = subeleriSuz(tumSubeler, sp);
+  const kapananSayisi = tumSubeler.length - aktifSubeler.length;
+  const subelerListe = aktifSubeler;
   const esikler = (segmentAyar?.esikler ?? []) as Esik[];
 
   if (!fiyatModeli) {
@@ -133,7 +137,11 @@ export default async function CiroKarlilikSayfasi({
         </p>
       </div>
 
-      <DonemSecici donem={donem} />
+      <DonemSecici
+        donem={donem}
+        kapananGoster={kapananlarGoruntulensin(sp)}
+        kapananSayisi={kapananSayisi}
+      />
 
       {duzenleyebilir && <FiyatForm model={fiyatModeli} />}
 

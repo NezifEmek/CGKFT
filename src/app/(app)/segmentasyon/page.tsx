@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import { DonemSecici, donemCoz } from "@/components/donem-secici";
+import { DonemSecici, donemCoz, subeleriSuz, kapananlarGoruntulensin } from "@/components/donem-secici";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import { aySirala, gunSayisiMap, subeKgOzetleri, segmentBul, kgFmt, type Esik } from "@/lib/analytics";
@@ -30,15 +30,19 @@ export default async function SegmentasyonSayfasi({
   const gunMap = gunSayisiMap(aylar ?? []);
   const donem = donemCoz(aylar ?? [], CARI_YIL, sp);
   const aktifAylar = donem.seciliAylar;
+  // Kapanan şubeler raporlarda varsayılan gizli; anahtarla açılabiliyor.
+  const tumSubeler = subeler ?? [];
+  const aktifSubeler = subeleriSuz(tumSubeler, sp);
+  const kapananSayisi = tumSubeler.length - aktifSubeler.length;
   const esikler = (segmentAyar?.esikler ?? []) as Esik[];
-  const ozet = subeKgOzetleri(subeler ?? [], satislar, CARI_YIL, aktifAylar, gunMap);
+  const ozet = subeKgOzetleri(aktifSubeler, satislar, CARI_YIL, aktifAylar, gunMap);
 
   const gruplar = new Map<string, { esik: Esik; subeler: { id: string; ad: string; bolge: string; kg: number; kgGunluk: number }[] }>();
   for (const e of [...esikler].sort((a, b) => b.min - a.min)) {
     gruplar.set(e.ad, { esik: e, subeler: [] });
   }
 
-  for (const sube of subeler ?? []) {
+  for (const sube of aktifSubeler) {
     const o = ozet.get(sube.id);
     if (!o || o.toplamKg <= 0) continue;
     const eslesen = segmentBul(o.kgGunluk, esikler);
@@ -60,7 +64,11 @@ export default async function SegmentasyonSayfasi({
         </p>
       </div>
 
-      <DonemSecici donem={donem} />
+      <DonemSecici
+        donem={donem}
+        kapananGoster={kapananlarGoruntulensin(sp)}
+        kapananSayisi={kapananSayisi}
+      />
 
       {duzenleyebilir && <EsikForm esikler={esikler} baz={segmentAyar?.baz ?? "KÜMÜLATİF"} />}
 

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import { DonemSecici, donemCoz } from "@/components/donem-secici";
+import { DonemSecici, donemCoz, subeleriSuz, kapananlarGoruntulensin } from "@/components/donem-secici";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import { aySirala, gunSayisiMap, subeKgOzetleri, kirilimHesapla, kgFmt } from "@/lib/analytics";
@@ -79,10 +79,14 @@ export default async function BolgeAnaliziSayfasi({
   const gunMap = gunSayisiMap(aylar ?? []);
   const donem = donemCoz(aylar ?? [], CARI_YIL, sp);
   const aktifAylar = donem.seciliAylar;
-  const ozet = subeKgOzetleri(subeler ?? [], satislar, CARI_YIL, aktifAylar, gunMap);
+  // Kapanan şubeler raporlarda varsayılan gizli; anahtarla açılabiliyor.
+  const tumSubeler = subeler ?? [];
+  const aktifSubeler = subeleriSuz(tumSubeler, sp);
+  const kapananSayisi = tumSubeler.length - aktifSubeler.length;
+  const ozet = subeKgOzetleri(aktifSubeler, satislar, CARI_YIL, aktifAylar, gunMap);
 
-  const bolgeSatirlari = kirilimHesapla(subeler ?? [], ozet, (s) => s.bolge);
-  const ilSatirlari = kirilimHesapla(subeler ?? [], ozet, (s) => s.il).slice(0, 20);
+  const bolgeSatirlari = kirilimHesapla(aktifSubeler, ozet, (s) => s.bolge);
+  const ilSatirlari = kirilimHesapla(aktifSubeler, ozet, (s) => s.il).slice(0, 20);
 
   return (
     <div className="space-y-6">
@@ -94,7 +98,11 @@ export default async function BolgeAnaliziSayfasi({
         </p>
       </div>
 
-      <DonemSecici donem={donem} />
+      <DonemSecici
+        donem={donem}
+        kapananGoster={kapananlarGoruntulensin(sp)}
+        kapananSayisi={kapananSayisi}
+      />
 
       <KirilimTablo baslik="Bölgeler" satirlar={bolgeSatirlari} />
       <KirilimTablo baslik="İller (İlk 20)" satirlar={ilSatirlari} />
