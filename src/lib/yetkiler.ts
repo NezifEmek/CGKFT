@@ -47,6 +47,7 @@ export const SAYFALAR: SayfaTanimi[] = [
   { anahtar: "franchise-basvuru", href: "/franchise-basvurulari", etiket: "📨 Franchise Başvuruları", bolum: "Kurumsal" },
   { anahtar: "dokuman", href: "/dokuman", etiket: "📄 Doküman Yönetimi", bolum: "Kurumsal" },
   { anahtar: "organizasyon", href: "/organizasyon", etiket: "🏛️ Organizasyon Şeması", bolum: "Kurumsal" },
+  { anahtar: "oneriler", href: "/oneriler", etiket: "💡 Öneriler", bolum: "Kurumsal" },
   { anahtar: "trello", href: "/trello", etiket: "🗂️ Trello", bolum: "Kurumsal" },
 
   { anahtar: "kullanicilar", href: "/kullanicilar", etiket: "👥 Kullanıcılar", bolum: "Yönetim" },
