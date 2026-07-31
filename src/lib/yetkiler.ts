@@ -43,6 +43,7 @@ export const SAYFALAR: SayfaTanimi[] = [
   { anahtar: "prim-hakedis", href: "/prim-hakedis", etiket: "💵 Prim Hakediş", bolum: "Finans" },
   { anahtar: "prim-projeksiyon", href: "/prim-projeksiyon", etiket: "📉 Prim Projeksiyonu", bolum: "Finans" },
 
+  { anahtar: "franchise-basvuru", href: "/franchise-basvurulari", etiket: "📨 Franchise Başvuruları", bolum: "Kurumsal" },
   { anahtar: "dokuman", href: "/dokuman", etiket: "📄 Doküman Yönetimi", bolum: "Kurumsal" },
   { anahtar: "organizasyon", href: "/organizasyon", etiket: "🏛️ Organizasyon Şeması", bolum: "Kurumsal" },
   { anahtar: "trello", href: "/trello", etiket: "🗂️ Trello", bolum: "Kurumsal" },
