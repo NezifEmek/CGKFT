@@ -604,6 +604,7 @@ function ExcelAktar({ subeler }: { subeler: GGSube[] }) {
   const [dosyaAdi, setDosyaAdi] = useState("");
   const [hata, setHata] = useState<string | null>(null);
   const [sonuc, setSonuc] = useState<string | null>(null);
+  const [ilerleme, setIlerleme] = useState("");
   const [gonderiliyor, gonder] = useTransition();
   const dosyaRef = useRef<HTMLInputElement>(null);
 
@@ -687,15 +688,28 @@ function ExcelAktar({ subeler }: { subeler: GGSube[] }) {
       return;
     }
 
+    // Sayfaları TEK TEK gönderiyoruz. Hepsini tek istekte yazmak 25 sayfalık
+    // gerçek dosyada sunucu zaman aşımına takılıyordu ve aktarım sessizce
+    // ilk 9 şubede kalıyordu. Sayfa başına bir istek hem sınıra takılmıyor
+    // hem de nerede kaldığı görülebiliyor.
     gonder(async () => {
-      const r = await excelIceAktar(secili);
-      if (r.hata) {
-        setHata(r.hata);
-      } else {
-        setSonuc(r.ok ?? "İçe aktarıldı");
-        setOnizleme(null);
-        if (dosyaRef.current) dosyaRef.current.value = "";
+      let gun = 0;
+      let kalem = 0;
+      for (let i = 0; i < secili.length; i++) {
+        setIlerleme(`${i + 1} / ${secili.length} sayfa aktarılıyor…`);
+        const r = await excelIceAktar([secili[i]]);
+        if (r.hata) {
+          setHata(`${i + 1}. sayfada durdu: ${r.hata} — önceki ${i} sayfa aktarıldı.`);
+          setIlerleme("");
+          return;
+        }
+        gun += r.gunSayisi ?? 0;
+        kalem += r.kalemSayisi ?? 0;
       }
+      setIlerleme("");
+      setSonuc(`İçe aktarıldı: ${secili.length} şube/ay, ${gun} gün, ${kalem} kalem`);
+      setOnizleme(null);
+      if (dosyaRef.current) dosyaRef.current.value = "";
     });
   }
 
@@ -784,7 +798,7 @@ function ExcelAktar({ subeler }: { subeler: GGSube[] }) {
               disabled={gonderiliyor}
               className="rounded-md bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 px-4 py-2 text-sm font-medium disabled:opacity-60"
             >
-              {gonderiliyor ? "Aktarılıyor…" : "Seçilenleri içe aktar"}
+              {gonderiliyor ? ilerleme || "Aktarılıyor…" : "Seçilenleri içe aktar"}
             </button>
             <button type="button" onClick={() => setOnizleme(null)} className={girdiSinif}>
               Vazgeç
