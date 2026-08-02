@@ -2,9 +2,14 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { primAyarlariKaydet, primAyarlariSifirla } from "./actions";
-import { primHesapla, primPersonelSatirlari } from "@/lib/prim";
+import { primHesapla, primPersonelSatirlari, primPersonelSatirlariKadrodan } from "@/lib/prim";
+import {
+  aydaGorevliler, kadroBilgisi, kadroKullanilabilir,
+  type Personel, type Atama, type PozisyonKisa,
+} from "@/lib/kadro";
+
 import type { PrimAyarlari } from "@/lib/dokuman-varsayilan";
-import type { Sube, AylikSatis } from "@/types/database";
+import { AYLAR_12, type Sube, type AylikSatis } from "@/types/database";
 
 const girdiSinif =
   "rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2.5 py-1.5 text-sm";
@@ -28,6 +33,9 @@ export function PrimArayuz({
   ayarlar,
   duzenlenebilir,
   gorunurKisiler,
+  personeller,
+  atamalar,
+  pozisyonlar,
 }: {
   subeler: Sube[];
   satislar: AylikSatis[];
@@ -36,6 +44,10 @@ export function PrimArayuz({
   duzenlenebilir: boolean;
   /** null = sınır yok (admin). Doluysa yalnızca bu kişilerin satırı gösterilir. */
   gorunurKisiler: string[] | null;
+  /** Kadro — adlar ve kişi sayıları buradan gelir. Boşsa eski listeye düşülür. */
+  personeller: Personel[];
+  atamalar: Atama[];
+  pozisyonlar: PozisyonKisa[];
 }) {
   const [secili, setSecili] = useState(() => {
     const son = aylar[aylar.length - 1];
@@ -50,12 +62,26 @@ export function PrimArayuz({
   const [yilStr, ay] = secili.split("|");
   const yil = Number(yilStr);
 
+  // Seçilen ayın kadrosu. Ay adı ("TEMMUZ") tarih biçimine çevriliyor;
+  // atamalar tarihli olduğu için karşılaştırma böyle yapılabiliyor.
+  const ayKisiler = useMemo(() => {
+    const ayNo = (AYLAR_12 as readonly string[]).indexOf(ay) + 1;
+    if (!ayNo || !yil) return [];
+    return aydaGorevliler(`${yil}-${String(ayNo).padStart(2, "0")}`, atamalar, personeller, pozisyonlar);
+  }, [yil, ay, atamalar, personeller, pozisyonlar]);
+
+  // Kadro kuruluysa oradan, değilse eski elle yazılmış listeden.
+  const kadroVar = kadroKullanilabilir(ayKisiler);
+
   const h = useMemo(
-    () => primHesapla(subeler, satislar, yil, ay, ayarlar),
-    [subeler, satislar, yil, ay, ayarlar],
+    () => primHesapla(subeler, satislar, yil, ay, ayarlar, kadroVar ? kadroBilgisi(ayKisiler) : undefined),
+    [subeler, satislar, yil, ay, ayarlar, kadroVar, ayKisiler],
   );
 
-  const tumPersonel = useMemo(() => primPersonelSatirlari(h, ayarlar), [h, ayarlar]);
+  const tumPersonel = useMemo(
+    () => (kadroVar ? primPersonelSatirlariKadrodan(h, ayKisiler) : primPersonelSatirlari(h, ayarlar)),
+    [h, ayarlar, kadroVar, ayKisiler],
+  );
   // Toplam her zaman TÜM personel üzerinden — kişi kendi satırını görmese de
   // havuzun tamamının ne kadar dağıtıldığı doğru görünsün.
   const toplamPrim = tumPersonel.reduce((t, p) => t + p.prim, 0);

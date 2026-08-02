@@ -4,6 +4,7 @@ import { primAyarlariNormalize, pozisyonlariNormalize } from "@/lib/dokuman";
 import { aySirala } from "@/lib/analytics";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
+import type { Personel, Atama } from "@/lib/kadro";
 import { PrimArayuz, type AyOgesi } from "./prim-arayuz";
 
 export default async function PrimHakedisSayfasi() {
@@ -28,6 +29,20 @@ export default async function PrimHakedisSayfasi() {
 
   const tabloYok = Boolean(ayarSonuc.error);
   const ayarlar = primAyarlariNormalize(ayarSonuc.data?.prim_ayarlari);
+
+  // Kadro: adlar artık prim ayarlarındaki elle yazılmış listeden değil,
+  // tarihli pozisyon atamalarından geliyor. Ay seçimi istemci tarafında
+  // yapıldığı için ham kayıtlar oraya veriliyor ve o ayın kadrosu orada
+  // çözülüyor. Tablolar yoksa (0018 uygulanmadıysa) boş gelir ve ekran
+  // eski listeye düşer.
+  const [personeller, atamalar] = await Promise.all([
+    tumSatirlariGetir<Personel>((f, t) =>
+      supabase.from("personeller").select("*").range(f, t).returns<Personel[]>(),
+    ).catch(() => [] as Personel[]),
+    tumSatirlariGetir<Atama>((f, t) =>
+      supabase.from("pozisyon_atamalari").select("*").range(f, t).returns<Atama[]>(),
+    ).catch(() => [] as Atama[]),
+  ]);
 
   // Prim ÖZELDİR: admin dışındaki kullanıcı yalnızca KENDİ tutarını görür —
   // astlarınınkini bile değil (Nezif: "sadece kendi primini görmeli").
@@ -82,6 +97,14 @@ export default async function PrimHakedisSayfasi() {
           ayarlar={ayarlar}
           duzenlenebilir={duzenlenebilir}
           gorunurKisiler={gorunurKisiAdlari ? [...gorunurKisiAdlari] : null}
+          personeller={personeller}
+          atamalar={atamalar}
+          pozisyonlar={pozisyonlar.map((p) => ({
+            id: p.id,
+            unvan: p.unvan,
+            adSoyad: p.adSoyad ?? "",
+            doluMu: true,
+          }))}
         />
       ) : (
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300">

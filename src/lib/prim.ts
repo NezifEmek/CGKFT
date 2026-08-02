@@ -51,12 +51,30 @@ export interface PrimSonucu {
   primYok: boolean;
 }
 
+/**
+ * O ayın kadrosu. Verilirse adlar ve kişi sayıları buradan alınır.
+ *
+ * Neden: adlar önceden prim ayarlarında elle yazılıydı ve kadro değişince
+ * geçmiş ayların primi de yeni kişiye yazılıyordu. Artık kadro tarihli
+ * atamalardan geliyor; her ay kendi kadrosuyla hesaplanıyor.
+ *
+ * Verilmezse eski davranış korunuyor (0018 uygulanmamış kurulumlar için).
+ */
+export interface KadroBilgisi {
+  uretimSayisi: number;
+  merkezSayisi: number;
+  merkezSorumluAd: string;
+  bolge1Ad: string;
+  bolge2Ad: string;
+}
+
 export function primHesapla(
   subeler: Sube[],
   satislar: AylikSatis[],
   yil: number,
   ay: string,
   a: PrimAyarlari,
+  kadro?: KadroBilgisi,
 ): PrimSonucu {
   const aktifler = subeler.filter((s) => s.aktif !== false);
 
@@ -65,7 +83,10 @@ export function primHesapla(
   // dağıtım bölgesinde iki sorumlunun şubeleri karışık olabiliyor.
   const merkezSubeler = aktifler.filter((s) => s.tip === "MS");
   const frSubeler = aktifler.filter((s) => s.tip === "FR");
-  const bolge2AdNorm = trUpper(a.bolge2_ad || "");
+  // Bölge sorumlusunun adı kadrodan geliyorsa oradan; yoksa ayarlardan.
+  const bolge1Ad = kadro?.bolge1Ad || a.bolge1_ad || "";
+  const bolge2Ad = kadro?.bolge2Ad || a.bolge2_ad || "";
+  const bolge2AdNorm = trUpper(bolge2Ad);
   const bolge2Subeler = bolge2AdNorm
     ? frSubeler.filter((s) => trUpper(s.merkez_yetkilisi || "") === bolge2AdNorm)
     : [];
@@ -106,7 +127,7 @@ export function primHesapla(
       kullanilan: merkezHedef,
     },
     {
-      ad: `Bölge 1 — ${a.bolge1_ad || "Bölge 1"}`,
+      ad: `Bölge 1 — ${bolge1Ad || "Bölge 1"}`,
       subeSayisi: bolge1Subeler.length,
       subeHedef: a.bolge1_sube_hedef_kg,
       ham: bolge1HedefHam,
@@ -114,7 +135,7 @@ export function primHesapla(
       kullanilan: bolge1Hedef,
     },
     {
-      ad: `Bölge 2 — ${a.bolge2_ad || "Bölge 2"}`,
+      ad: `Bölge 2 — ${bolge2Ad || "Bölge 2"}`,
       subeSayisi: bolge2Subeler.length,
       subeHedef: a.bolge2_sube_hedef_kg,
       ham: bolge2HedefHam,
@@ -175,8 +196,11 @@ export function primHesapla(
   const md = a.merkez_dagilim;
   const bd = a.bolge_dagilim;
 
-  const nU = a.personel_uretim.length || 1;
-  const nM = a.personel_merkez.length || 1;
+  // Kişi başına pay, o AYIN kadro sayısına bölünür. Kadro verilmezse eski
+  // davranış: ayarlardaki liste uzunluğu. Bu ayrım önemli — biri ayrıldığında
+  // geçmiş ayın payı, o ay görevde olan kişi sayısına göre kalmalı.
+  const nU = (kadro ? kadro.uretimSayisi : a.personel_uretim.length) || 1;
+  const nM = (kadro ? kadro.merkezSayisi : a.personel_merkez.length) || 1;
 
   const uretimGrup =
     uretimHavuz * ud.uretim +
@@ -223,6 +247,35 @@ export interface PrimPersonelSatiri {
   unvan: string;
   grup: string;
   prim: number;
+}
+
+/**
+ * Kadrodan gelen kişilerle prim tablosu.
+ *
+ * Adlar artık elle yazılmıyor: seçilen ayda o göreve atanmış kişiler
+ * geliyor. Kadro boşsa (0018 uygulanmamışsa ya da o ay için hiç atama
+ * yoksa) çağıran taraf eski primPersonelSatirlari'na düşer.
+ */
+export function primPersonelSatirlariKadrodan(
+  h: PrimSonucu,
+  kisiler: { adSoyad: string; unvan: string; primGrubu: string }[],
+): PrimPersonelSatiri[] {
+  const pay: Record<string, { grup: string; prim: number }> = {
+    merkez_sorumlu: { grup: "Bölge Sorumluları", prim: h.merkezSorumlu },
+    bolge1: { grup: "Bölge Sorumluları", prim: h.bolge1Sorumlu },
+    bolge2: { grup: "Bölge Sorumluları", prim: h.bolge2Sorumlu },
+    merkez: { grup: "Merkez / İdari", prim: h.merkezKisiBasina },
+    uretim: { grup: "Üretim", prim: h.uretimKisiBasina },
+  };
+
+  return kisiler
+    .filter((k) => k.primGrubu !== "yok" && pay[k.primGrubu])
+    .map((k) => ({
+      ad: k.adSoyad,
+      unvan: k.unvan,
+      grup: pay[k.primGrubu].grup,
+      prim: pay[k.primGrubu].prim,
+    }));
 }
 
 /** Sonucu kişi bazlı prim tablosuna çevirir (eski personelSatirlar mantığı). */

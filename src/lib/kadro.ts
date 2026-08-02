@@ -130,6 +130,36 @@ export function grupUyeleri(kisiler: AydaKisi[], grup: PrimGrubu): AydaKisi[] {
   return kisiler.filter((k) => k.primGrubu === grup);
 }
 
+/**
+ * Prim motoruna verilecek kadro özeti.
+ *
+ * Bölge sorumlusu adları şube eşleştirmesinde kullanıldığı için (şubenin
+ * merkez_yetkilisi alanıyla karşılaştırılıyor) buradan geçiyor. O ay o
+ * görevde kimse yoksa ad boş kalır ve çağıran taraf ayarlardaki değere
+ * düşer — yoksa bölge ayrımı çöker ve prim sıfırlanır.
+ */
+export function kadroBilgisi(kisiler: AydaKisi[]): {
+  uretimSayisi: number;
+  merkezSayisi: number;
+  merkezSorumluAd: string;
+  bolge1Ad: string;
+  bolge2Ad: string;
+} {
+  const ilk = (g: PrimGrubu) => grupUyeleri(kisiler, g)[0]?.adSoyad ?? "";
+  return {
+    uretimSayisi: grupUyeleri(kisiler, "uretim").length,
+    merkezSayisi: grupUyeleri(kisiler, "merkez").length,
+    merkezSorumluAd: ilk("merkez_sorumlu"),
+    bolge1Ad: ilk("bolge1"),
+    bolge2Ad: ilk("bolge2"),
+  };
+}
+
+/** Kadro o ay için kullanılabilir mi? Hiç atama yoksa eski listeye düşülür. */
+export function kadroKullanilabilir(kisiler: AydaKisi[]): boolean {
+  return kisiler.some((k) => k.primGrubu !== "yok");
+}
+
 // ─── Tutarlılık uyarıları ─────────────────────────────────────────────────
 
 export type UyariTuru =
