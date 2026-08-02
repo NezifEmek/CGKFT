@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { dosyaYukle, dosyaSil, dosyaBaglantisi } from "@/app/(app)/dosya-actions";
 import { boyutYaz, simge, AZAMI_BOYUT, type Dosya } from "@/lib/dosya";
 
-const btnSade =
+const btnSade = "yazdirma-gizle " +
   "rounded-md border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 text-sm disabled:opacity-60";
 
 /**

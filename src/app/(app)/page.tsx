@@ -23,6 +23,7 @@ import {
 } from "@/components/grafikler";
 import { DikkatPaneli } from "@/components/dikkat-paneli";
 import { dikkatSatirlari } from "@/lib/dikkat";
+import { YazdirDugmesi } from "@/components/yazdir-dugmesi";
 
 const CARI_YIL = 2026;
 const ONCEKI_YIL = 2025;
@@ -255,6 +256,10 @@ export default async function GenelBakisSayfasi({
           {profile.ad_soyad ? `Hoş geldin, ${profile.ad_soyad}.` : "Hoş geldin."} Aşağıdaki rakamlar
           yalnızca yetkili olduğun şubeleri kapsar.
         </p>
+      </div>
+
+      <div className="flex justify-end">
+        <YazdirDugmesi baslik={`Genel-Bakis-${bas}-${bit}-${CARI_YIL}`} />
       </div>
 
       <DikkatPaneli satirlar={dikkat} />

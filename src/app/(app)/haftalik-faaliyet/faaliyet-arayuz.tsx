@@ -7,14 +7,15 @@ import { planEkle, planDurum, planSil, planKopyala } from "./actions";
 import { PLAN_TURLERI, TUR_ETIKET } from "@/lib/plan";
 import { faaliyetMetni, type KisiFaaliyet } from "@/lib/faaliyet";
 import { tarihYaz, type Hafta } from "@/lib/hafta";
+import { YazdirDugmesi } from "@/components/yazdir-dugmesi";
 
 const gir =
   "rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2.5 py-1.5 text-sm";
 const kart =
   "rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900";
-const btn =
+const btn = "yazdirma-gizle " +
   "rounded-md bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 px-3.5 py-1.5 text-sm font-medium disabled:opacity-60";
-const btnSade =
+const btnSade = "yazdirma-gizle " +
   "rounded-md border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 text-sm disabled:opacity-60";
 
 const SONUC_RENK: Record<string, string> = {
@@ -114,9 +115,12 @@ export function FaaliyetArayuz({
           <input type="checkbox" checked={sadeceFaal} onChange={(e) => setSadeceFaal(e.target.checked)} />
           Yalnızca hareketi olanlar
         </label>
-        <button type="button" onClick={metniIndir} className={btnSade + " ml-auto"}>
-          ⬇ Rapor metni (.txt)
-        </button>
+        <span className="ml-auto flex gap-2">
+          <button type="button" onClick={metniIndir} className={btnSade}>
+            ⬇ Rapor metni (.txt)
+          </button>
+          <YazdirDugmesi baslik={`Haftalik-Faaliyet-${hafta.baslangic}`} />
+        </span>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">

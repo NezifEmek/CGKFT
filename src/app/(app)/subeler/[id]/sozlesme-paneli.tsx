@@ -11,9 +11,9 @@ import type { Dosya } from "@/lib/dosya";
 
 const gir =
   "w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2.5 py-1.5 text-sm";
-const btn =
+const btn = "yazdirma-gizle " +
   "rounded-md bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 px-3.5 py-1.5 text-sm font-medium disabled:opacity-60";
-const btnSade =
+const btnSade = "yazdirma-gizle " +
   "rounded-md border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 text-sm disabled:opacity-60";
 
 function A({ e, children }: { e: string; children: React.ReactNode }) {

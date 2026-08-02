@@ -24,3 +24,84 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ─── Yazdırma / PDF ────────────────────────────────────────────────────
+   "Excel ve PDF çıktıları" talebinin PDF ayağı. Ayrı bir PDF kütüphanesi
+   kurmak yerine tarayıcının kendi "PDF olarak kaydet" özelliği kullanılıyor:
+   çıktı her zaman ekranda görünenle birebir aynı oluyor ve Türkçe karakter,
+   yazı tipi, sayfa boyutu derdi çıkmıyor.
+
+   Kural: ekranda işe yarayan ama kâğıtta anlamsız olan her şey gizlenir —
+   menü, düğmeler, filtre kutuları, form alanları. */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 12mm 10mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Yan menü ve çıkış formu kâğıda basılmaz. */
+  aside,
+  nav,
+  .yazdirma-gizle {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  /* Seçim kutuları ve giriş alanları kâğıtta iş görmez.
+     DİKKAT: <button> topluca gizlenmiyor. Bu arayüzde kanban kartları,
+     açılır başlıklar ve özet kutuları da <button> — hepsini gizlemek
+     çıktıdan gerçek içeriği silerdi. Eylem düğmeleri kendi sınıflarında
+     .yazdirma-gizle taşıyor. */
+  select,
+  input,
+  textarea,
+  [type="file"] {
+    display: none !important;
+  }
+
+  /* Kartların gölgesi ve koyu tema arka planı mürekkep yakar. */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  .rounded-xl,
+  .rounded-lg {
+    border-color: #d4d4d4 !important;
+    background: #fff !important;
+  }
+
+  /* Tablo ve kart satırları sayfa ortasından bölünmesin. */
+  tr,
+  li,
+  section {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group; /* uzun tablolarda başlık her sayfada */
+  }
+
+  a {
+    text-decoration: none !important;
+    color: #000 !important;
+  }
+
+  /* Kaydırılabilir alanlar kâğıtta tamamen açılsın; yoksa içerik kesilir. */
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .max-h-96,
+  [class*="max-h-"] {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+}

@@ -9,14 +9,15 @@ import {
   uretimOzeti, uretimCsv, kgYaz, kilogramaCevir, basligiTani,
   OLCU_BIRIMLERI, AMBALAJ_BIRIMLERI, type Urun, type UretimKaydi, type Kirilim,
 } from "@/lib/uretim";
+import { YazdirDugmesi } from "@/components/yazdir-dugmesi";
 
 const gir =
   "rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2.5 py-1.5 text-sm";
 const kart =
   "rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900";
-const btn =
+const btn = "yazdirma-gizle " +
   "rounded-md bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 px-3.5 py-1.5 text-sm font-medium disabled:opacity-60";
-const btnSade =
+const btnSade = "yazdirma-gizle " +
   "rounded-md border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 text-sm disabled:opacity-60";
 
 export interface Tanim {
@@ -139,9 +140,12 @@ export function UretimArayuz({
           ))}
         </div>
         {(sekme === "panel" || sekme === "kayitlar") && (
-          <button type="button" onClick={csvIndir} className={btnSade + " ml-auto"}>
-            ⬇ Excel (CSV)
-          </button>
+          <span className="ml-auto flex gap-2">
+            <button type="button" onClick={csvIndir} className={btnSade}>
+              ⬇ Excel (CSV)
+            </button>
+            <YazdirDugmesi baslik={`Uretim-Raporu-${bugun}`} />
+          </span>
         )}
       </div>
 

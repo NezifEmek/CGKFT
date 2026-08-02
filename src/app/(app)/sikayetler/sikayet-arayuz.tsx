@@ -13,14 +13,15 @@ import {
 } from "@/lib/sikayet";
 import type { Dosya } from "@/lib/dosya";
 import { DosyaEkleri } from "@/components/dosya-ekleri";
+import { YazdirDugmesi } from "@/components/yazdir-dugmesi";
 
 const gir =
   "rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2.5 py-1.5 text-sm";
 const kart =
   "rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900";
-const btn =
+const btn = "yazdirma-gizle " +
   "rounded-md bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 px-3.5 py-1.5 text-sm font-medium disabled:opacity-60";
-const btnSade =
+const btnSade = "yazdirma-gizle " +
   "rounded-md border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 text-sm disabled:opacity-60";
 
 export interface Hareket {
@@ -174,6 +175,7 @@ export function SikayetArayuz({
           className={gir + " flex-1 min-w-48"}
         />
         <button type="button" onClick={csvIndir} className={btnSade}>⬇ Excel (CSV)</button>
+        <YazdirDugmesi baslik={`Sikayet-Raporu-${bugun}`} />
         <button
           type="button"
           onClick={() => { setDuzenlenen(null); setFormAcik((v) => !v); }}
