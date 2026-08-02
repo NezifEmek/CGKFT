@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { basvuruEkle, basvuruGuncelle, basvuruSil } from "./actions";
+import { basvuruEkle, basvuruGuncelle, basvuruSil, topluSorumluAta } from "./actions";
 import { SubeAcPaneli } from "./sube-ac-paneli";
 import {
   DURUMLAR,
@@ -32,7 +32,7 @@ function Rozet({ durum }: { durum: string }) {
 }
 
 /** Ekleme ve düzenlemede aynı alanlar kullanılıyor. */
-function Alanlar({ b, sorumlular }: { b?: FranchiseBasvuru; sorumlular: string[] }) {
+function Alanlar({ b, kisiler }: { b?: FranchiseBasvuru; kisiler: string[] }) {
   const [secim, setSecim] = useState<Record<string, string>>({
     dukkan: b?.dukkan ?? "",
     sermaye: b?.sermaye ?? "",
@@ -127,17 +127,25 @@ function Alanlar({ b, sorumlular }: { b?: FranchiseBasvuru; sorumlular: string[]
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <label className="block">
           <span className="block text-xs text-neutral-500 mb-1">Şirket sorumlusu</span>
-          <input
+          {/* Serbest metin değil seçim: "Genel Ekip" gibi kişi olmayan
+              değerler girilince o başvuru kimsenin faaliyet raporuna
+              düşmüyordu. Eski kayıtta sistemde olmayan bir ad varsa
+              kaybolmasın diye listeye ekleniyor. */}
+          <select
             name="sirket_sorumlusu"
-            defaultValue={b?.sirket_sorumlusu}
-            list="franchise-sorumlular"
+            defaultValue={b?.sirket_sorumlusu ?? ""}
             className={gir + " w-full"}
-          />
-          <datalist id="franchise-sorumlular">
-            {sorumlular.map((s) => (
-              <option key={s} value={s} />
+          >
+            <option value="">— seçilmedi —</option>
+            {kisiler.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
             ))}
-          </datalist>
+            {b?.sirket_sorumlusu && !kisiler.includes(b.sirket_sorumlusu) && (
+              <option value={b.sirket_sorumlusu}>{b.sirket_sorumlusu} (eski kayıt)</option>
+            )}
+          </select>
         </label>
         <label className="block">
           <span className="block text-xs text-neutral-500 mb-1">Son durum</span>
@@ -218,6 +226,7 @@ function Alanlar({ b, sorumlular }: { b?: FranchiseBasvuru; sorumlular: string[]
 export function BasvuruArayuz({
   basvurular,
   sorumlular,
+  kisiler,
   yazabilir,
   silebilir,
   bolgeler,
@@ -226,6 +235,7 @@ export function BasvuruArayuz({
 }: {
   basvurular: FranchiseBasvuru[];
   sorumlular: string[];
+  kisiler: string[];
   yazabilir: boolean;
   silebilir: boolean;
   bolgeler: string[];
@@ -243,6 +253,9 @@ export function BasvuruArayuz({
   const [fDurum, setFDurum] = useState("");
   const [fKanal, setFKanal] = useState("");
   const [fSorumlu, setFSorumlu] = useState("");
+  const [topluKisi, setTopluKisi] = useState("");
+  const [topluCalisiyor, setTopluCalisiyor] = useState(false);
+  const [topluSonuc, setTopluSonuc] = useState<string | null>(null);
   const [ara, setAra] = useState("");
 
   const listelenen = useMemo(() => {
@@ -332,6 +345,55 @@ export function BasvuruArayuz({
         )}
       </div>
 
+      {/* Toplu sorumlu atama: filtreyle daralt, sonra hepsini bir kişiye ver.
+          662 kaydı tek tek düzeltmek pratik olmadığı için var. */}
+      {yazabilir && (
+        <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/60 px-3 py-2.5 flex flex-wrap items-center gap-2">
+          <span className="text-sm">
+            Filtredeki <b>{listelenen.length}</b> kaydın sorumlusunu topluca değiştir:
+          </span>
+          <select
+            value={topluKisi}
+            onChange={(e) => setTopluKisi(e.target.value)}
+            className={gir}
+          >
+            <option value="">— kişi seçin —</option>
+            {kisiler.map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={!topluKisi || !listelenen.length || topluCalisiyor}
+            onClick={async () => {
+              const soru =
+                `Filtredeki ${listelenen.length} başvurunun sorumlusu "${topluKisi}" olarak ` +
+                `değiştirilecek. Bu işlem geri alınamaz. Onaylıyor musunuz?`;
+              if (!window.confirm(soru)) return;
+              setTopluCalisiyor(true);
+              setTopluSonuc(null);
+              const r = await topluSorumluAta(listelenen.map((b) => b.id), topluKisi);
+              setTopluCalisiyor(false);
+              setTopluSonuc(
+                r.hata ? `Hata: ${r.hata}` : `${r.guncellenen} başvuru ${topluKisi} adına geçti.`,
+              );
+            }}
+            className="rounded-md border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 text-sm disabled:opacity-50"
+          >
+            {topluCalisiyor ? "Atanıyor…" : "Ata"}
+          </button>
+          {topluSonuc && (
+            <span
+              className={
+                topluSonuc.startsWith("Hata") ? "text-sm text-red-600" : "text-sm text-emerald-600"
+              }
+            >
+              {topluSonuc}
+            </span>
+          )}
+        </div>
+      )}
+
       {durum?.ok && <p className="text-sm text-emerald-600">✓ {durum.ok}</p>}
       {durum?.hata && <p className="text-sm text-red-600">{durum.hata}</p>}
 
@@ -339,7 +401,7 @@ export function BasvuruArayuz({
       {ekleAcik && yazabilir && (
         <form action={ekleAction} className={kart + " space-y-3"}>
           <h3 className="font-medium text-sm">Yeni Başvuru</h3>
-          <Alanlar sorumlular={sorumlular} />
+          <Alanlar kisiler={kisiler} />
           <button
             type="submit"
             disabled={eklePending}
@@ -414,7 +476,7 @@ export function BasvuruArayuz({
                       {yazabilir ? (
                         <form action={guncelleAction} className="space-y-3 max-w-5xl">
                           <input type="hidden" name="basvuru_id" value={b.id} />
-                          <Alanlar b={b} sorumlular={sorumlular} />
+                          <Alanlar b={b} kisiler={kisiler} />
                           <div className="flex flex-wrap items-center gap-3">
                             <button
                               type="submit"

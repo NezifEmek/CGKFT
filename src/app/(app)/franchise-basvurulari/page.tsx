@@ -21,8 +21,24 @@ export default async function FranchiseBasvurulariSayfasi() {
   const basvurular = basvuruSonuc.veri;
   const tabloYok = Boolean(basvuruSonuc.hata);
 
+  // Sorumlu artık serbest metin değil, sistemdeki kişilerden seçiliyor.
+  // Serbest metin olduğu sürece "Genel Ekip" gibi kişi olmayan değerler
+  // giriliyordu; bunlar kimsenin faaliyet raporuna düşmüyordu.
+  const { data: profiller } = await supabase
+    .from("profiles")
+    .select("ad_soyad")
+    .order("ad_soyad")
+    .returns<{ ad_soyad: string | null }[]>();
+
+  const kisiler = (profiller ?? [])
+    .map((p) => (p.ad_soyad ?? "").trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, "tr"));
+
+  // Filtre listesi: kişiler + veride geçen ama artık seçilemeyen eski
+  // değerler (varsa) — eski kayıtlar süzülebilsin diye.
   const sorumlular = [
-    ...new Set(basvurular.map((b) => b.sirket_sorumlusu).filter(Boolean)),
+    ...new Set([...kisiler, ...basvurular.map((b) => b.sirket_sorumlusu).filter(Boolean)]),
   ].sort((a, b) => a.localeCompare(b, "tr"));
 
   // Şube açma paneli için: bölge ve merkez yetkilisi seçenekleri, ve
@@ -71,6 +87,7 @@ export default async function FranchiseBasvurulariSayfasi() {
         <BasvuruArayuz
           basvurular={basvurular}
           sorumlular={sorumlular}
+          kisiler={kisiler}
           yazabilir={yazabilir}
           silebilir={silebilir}
           bolgeler={bolgeler}

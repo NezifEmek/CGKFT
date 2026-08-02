@@ -314,3 +314,51 @@ export async function subeBagiKaldir(_onceki: Sonuc | null, formData: FormData):
   revalidatePath("/franchise-basvurulari");
   return { ok: "Bağlantı kaldırıldı — şube silinmedi, duruyor." };
 }
+
+/**
+ * Toplu sorumlu atama.
+ *
+ * 745 başvurunun 662'sinde sorumlu olarak kişi değil "Genel Ekip" yazıyordu;
+ * bunlar temizlenince tek tek atama yapmak pratik olmadığı için toplu araç
+ * gerekti. Filtre ekranda uygulanıyor, buraya yalnızca sonuçtaki kimlikler
+ * geliyor — böylece kullanıcı neyi değiştirdiğini görerek onaylıyor.
+ */
+export async function topluSorumluAta(
+  kimlikler: string[],
+  yeniSorumlu: string,
+): Promise<{ guncellenen: number; hata?: string }> {
+  const profile = await requireProfile();
+  if (profile.rol === "denetmen") return { guncellenen: 0, hata: "Bu işlem için yetkiniz yok." };
+
+  const temiz = [...new Set(kimlikler.filter((k) => typeof k === "string" && k))];
+  if (!temiz.length) return { guncellenen: 0, hata: "Hiç kayıt seçilmedi." };
+
+  // Atanacak kişi gerçekten sistemde olmalı; yoksa "Genel Ekip" sorunu
+  // başka bir adla geri gelir.
+  const supabase = await createClient();
+  const ad = yeniSorumlu.trim();
+  if (ad) {
+    const { data: kisi } = await supabase
+      .from("profiles")
+      .select("ad_soyad")
+      .eq("ad_soyad", ad)
+      .maybeSingle<{ ad_soyad: string }>();
+    if (!kisi) return { guncellenen: 0, hata: `"${ad}" sistemde kayıtlı bir kişi değil.` };
+  }
+
+  // Büyük listelerde tek istekte URL sınırına takılmamak için parçalıyoruz.
+  const PARCA = 200;
+  let toplam = 0;
+  for (let i = 0; i < temiz.length; i += PARCA) {
+    const { data, error } = await supabase
+      .from("franchise_basvurulari")
+      .update({ sirket_sorumlusu: ad, guncelleyen_id: profile.id, updated_at: new Date().toISOString() })
+      .in("id", temiz.slice(i, i + PARCA))
+      .select("id");
+    if (error) return { guncellenen: toplam, hata: "Güncellenemedi: " + error.message };
+    toplam += data?.length ?? 0;
+  }
+
+  revalidatePath("/franchise-basvurulari");
+  return { guncellenen: toplam };
+}
