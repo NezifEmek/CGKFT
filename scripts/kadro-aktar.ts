@@ -20,7 +20,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
-import { asciiKatla } from "../src/lib/organizasyon.ts";
+import { asciiKatla } from "../src/lib/organizasyon";
 
 const env = Object.fromEntries(
   readFileSync("./.env.local", "utf8")
@@ -36,7 +36,7 @@ const db = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE
   auth: { persistSession: false },
 });
 
-async function yeniden<T>(f: () => Promise<T>, kez = 5): Promise<T> {
+async function yeniden<T>(f: () => PromiseLike<T>, kez = 5): Promise<T> {
   for (let i = 0; i < kez; i++) {
     try {
       return await f();
