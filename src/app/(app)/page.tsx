@@ -21,6 +21,8 @@ import {
   SegmentDonut,
   YatayCubukGrafik,
 } from "@/components/grafikler";
+import { DikkatPaneli } from "@/components/dikkat-paneli";
+import { dikkatSatirlari } from "@/lib/dikkat";
 
 const CARI_YIL = 2026;
 const ONCEKI_YIL = 2025;
@@ -115,6 +117,29 @@ export default async function GenelBakisSayfasi({
     supabase.from("segment_ayarlari").select("*").eq("id", 1).single(),
   ]);
 
+  // "Dikkat gerektirenler" verisi. Modüllerin bir kısmı henüz kurulmamış
+  // olabilir; her biri ayrı yakalanıyor ki biri eksikse ana sayfa çökmesin.
+  const bosa = <T,>(p: PromiseLike<{ data: T[] | null }>) =>
+    Promise.resolve(p).then((r) => r.data ?? []).catch(() => [] as T[]);
+
+  const [dSikayet, dAtama, dSozlesme, dGorev, dErteleme, dOneri, dDenetim] = await Promise.all([
+    bosa<{ id: string; durum: string; son_cozum_tarihi: string | null }>(
+      supabase.from("sikayetler").select("id, durum, son_cozum_tarihi"),
+    ),
+    bosa<{ sikayet_id: string }>(supabase.from("sikayet_atamalari").select("sikayet_id")),
+    bosa<{ id: string; bitis: string | null; uyari_gun: number }>(
+      supabase.from("sozlesmeler").select("id, bitis, uyari_gun"),
+    ),
+    bosa<{ id: string; durum: string; termin: string }>(
+      supabase.from("toplanti_gorevleri").select("id, durum, termin"),
+    ),
+    bosa<{ id: string; onay_durumu: string }>(
+      supabase.from("gorev_ertelemeleri").select("id, onay_durumu"),
+    ),
+    bosa<{ id: string; durum: string }>(supabase.from("oneriler").select("id, durum")),
+    bosa<{ sube_id: string; tarih: string }>(supabase.from("denetimler").select("sube_id, tarih")),
+  ]);
+
   const subelerListe = subeler ?? [];
   const gunMap = gunSayisiMap(aylar ?? []);
   const tumAylar = aySirala((aylar ?? []).filter((a) => a.yil === CARI_YIL).map((a) => a.ay));
@@ -202,6 +227,26 @@ export default async function GenelBakisSayfasi({
     .sort((a, b) => b.kg - a.kg)
     .slice(0, 10);
 
+  // Şube başına son denetim tarihi — "unutulmuş şube" hesabı için.
+  // Yalnızca aktif şubeler; kapanmış şubenin denetlenmemesi normal.
+  const sonDenetimMap = new Map<string, string>();
+  for (const d of dDenetim) {
+    const onceki = sonDenetimMap.get(d.sube_id);
+    if (!onceki || d.tarih > onceki) sonDenetimMap.set(d.sube_id, d.tarih);
+  }
+  const dikkat = dikkatSatirlari({
+    bugun: new Date().toISOString().slice(0, 10),
+    sikayetler: dSikayet,
+    sikayetAtamalari: dAtama,
+    sozlesmeler: dSozlesme,
+    gorevler: dGorev,
+    ertelemeler: dErteleme,
+    oneriler: dOneri,
+    subeDenetimleri: subelerListe
+      .filter((s) => s.aktif !== false)
+      .map((s) => ({ subeId: s.id, sonDenetim: sonDenetimMap.get(s.id) ?? null })),
+  });
+
   return (
     <div className="space-y-4">
       <div>
@@ -211,6 +256,8 @@ export default async function GenelBakisSayfasi({
           yalnızca yetkili olduğun şubeleri kapsar.
         </p>
       </div>
+
+      <DikkatPaneli satirlar={dikkat} />
 
       {/* Dönem seçici */}
       <form
