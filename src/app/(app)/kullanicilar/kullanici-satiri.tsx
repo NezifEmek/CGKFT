@@ -81,6 +81,17 @@ export function KullaniciSatiri({
             {acik ? "▾" : "▸"} {k.adSoyad || "—"}
           </button>
           {benMiyim && <span className="ml-2 text-[10px] text-neutral-400">(siz)</span>}
+          {!benMiyim && (
+            // Bağlantı (GET) — görüntüleme modundayken POST'lar kapalı olduğu
+            // için form kullanılamaz.
+            <a
+              href={`/goruntuleme?kisi=${k.id}`}
+              title={`${k.adSoyad} olarak görüntüle (salt okunur)`}
+              className="ml-2 text-[11px] text-neutral-500 hover:underline"
+            >
+              👁️ gibi görüntüle
+            </a>
+          )}
         </td>
         <td className="px-4 py-2 text-neutral-600 dark:text-neutral-400">{k.eposta || "—"}</td>
         <td className="px-4 py-2">{ROL_ETIKET[k.rol]}</td>

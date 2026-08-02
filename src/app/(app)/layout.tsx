@@ -1,11 +1,11 @@
-import { requireProfile } from "@/lib/auth";
+import { profilVeGoruntuleme } from "@/lib/auth";
 import { ROL_ETIKET } from "@/types/database";
 import { SAYFALAR, BOLUM_SIRASI, gorunurSayfalar } from "@/lib/yetkiler";
 import { cikisYap } from "./actions";
 import { YanMenuLinkleri, type MenuOgesi } from "./yan-menu";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const profile = await requireProfile();
+  const { profile, goruntuleme } = await profilVeGoruntuleme();
 
   // Menü artık tek kaynaktan üretiliyor: kullanıcının sayfa yetkileri
   // (tanımlı değilse rolün varsayılanı) SAYFALAR listesini süzüyor.
@@ -56,7 +56,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </form>
       </aside>
 
-      <main className="flex-1 min-w-0 p-5 md:p-7">{children}</main>
+      <main className="flex-1 min-w-0 p-5 md:p-7">
+        {goruntuleme && (
+          <div className="yazdirma-gizle sticky top-0 z-30 -mt-5 md:-mt-7 -mx-5 md:-mx-7 mb-4 px-5 md:px-7 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white shadow"
+               style={{ background: "#c0392b" }}>
+            <span>👁️</span>
+            <span>
+              <b>{goruntuleme.hedefAd}</b> olarak görüntülüyorsunuz — ekranlar, yetkiler ve prim
+              onun gördüğü gibi. Bu moddayken <b>hiçbir değişiklik yapılamaz</b>.
+            </span>
+            <a
+              href="/goruntuleme?cik=1"
+              className="ml-auto rounded-md bg-white/20 hover:bg-white/30 px-3 py-1 font-medium"
+            >
+              Moddan çık
+            </a>
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }
