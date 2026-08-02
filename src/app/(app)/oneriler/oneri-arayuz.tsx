@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { oneriEkle, destekDegistir, oneriKarar, oneriSil, KATEGORILER, DURUMLAR, ONCELIKLER } from "./actions";
+import { oneriEkle, destekDegistir, oneriKarar, oneriSil } from "./actions";
+import { KATEGORILER, DURUMLAR, ONCELIKLER } from "@/lib/oneri";
 
 const gir = "rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2.5 py-1.5 text-sm";
 const kart = "rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4";

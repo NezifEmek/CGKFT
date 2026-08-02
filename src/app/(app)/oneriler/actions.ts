@@ -4,21 +4,12 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 
+// Sabitler @/lib/oneri'de: "use server" dosyasından ihraç edilen dizi/nesne
+// istemcide gerçek değer olarak görünmez.
+import { KATEGORILER, DURUMLAR, ONCELIKLER } from "@/lib/oneri";
+
 type Sonuc = { hata?: string; ok?: string };
 const YOL = "/oneriler";
-
-export const KATEGORILER = [
-  "Yazılım / Panel",
-  "Süreç",
-  "Şube Operasyonu",
-  "Üretim",
-  "Pazarlama",
-  "İnsan Kaynakları",
-  "Diğer",
-] as const;
-
-export const DURUMLAR = ["yeni", "inceleniyor", "planlandi", "yapildi", "reddedildi"] as const;
-export const ONCELIKLER = ["dusuk", "orta", "yuksek"] as const;
 
 const m = (f: FormData, a: string) => String(f.get(a) ?? "").trim();
 

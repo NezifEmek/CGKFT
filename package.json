@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/use-server-denetimi.mjs",
     "build": "next build",
+    "denetim": "node scripts/use-server-denetimi.mjs",
     "start": "next start",
     "lint": "eslint",
     "migrate": "tsx scripts/migrate-data-json.ts"

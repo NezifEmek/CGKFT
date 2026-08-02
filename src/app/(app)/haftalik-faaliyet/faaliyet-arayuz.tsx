@@ -3,7 +3,8 @@
 import { useActionState, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { planEkle, planDurum, planSil, planKopyala, PLAN_TURLERI, TUR_ETIKET } from "./actions";
+import { planEkle, planDurum, planSil, planKopyala } from "./actions";
+import { PLAN_TURLERI, TUR_ETIKET } from "@/lib/plan";
 import { faaliyetMetni, type KisiFaaliyet } from "@/lib/faaliyet";
 import { tarihYaz, type Hafta } from "@/lib/hafta";
 

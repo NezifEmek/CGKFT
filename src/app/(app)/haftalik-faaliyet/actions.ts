@@ -4,18 +4,12 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { haftaBasi } from "@/lib/hafta";
+// Sabitler @/lib/plan'da: "use server" dosyasından ihraç edilen dizi/nesne
+// istemcide gerçek değer olarak görünmez.
+import { PLAN_TURLERI } from "@/lib/plan";
 
 type Sonuc = { hata?: string; ok?: string };
 const YOL = "/haftalik-faaliyet";
-
-export const PLAN_TURLERI = ["ziyaret", "denetim", "toplanti", "egitim", "diger"] as const;
-export const TUR_ETIKET: Record<string, string> = {
-  ziyaret: "Ziyaret",
-  denetim: "Denetim",
-  toplanti: "Toplantı",
-  egitim: "Eğitim",
-  diger: "Diğer",
-};
 
 const m = (f: FormData, a: string) => String(f.get(a) ?? "").trim();
 
