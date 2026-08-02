@@ -68,6 +68,7 @@ export const SAYFALAR: SayfaTanimi[] = [
   { anahtar: "uretim", href: "/uretim", etiket: "🏭 Günlük Üretim", bolum: "Üretim" },
 
   { anahtar: "toplantilar", href: "/toplantilar", etiket: "🗓️ Toplantı Yönetimi", bolum: "Kurumsal" },
+  { anahtar: "personel", href: "/personel", etiket: "👤 Personel", bolum: "Kurumsal" },
   { anahtar: "organizasyon", href: "/organizasyon", etiket: "🏛️ Organizasyon Şeması", bolum: "Kurumsal" },
   { anahtar: "dokuman", href: "/dokuman", etiket: "📄 Görev Tanımları", bolum: "Kurumsal" },
   { anahtar: "oneriler", href: "/oneriler", etiket: "💡 Öneriler", bolum: "Kurumsal" },
