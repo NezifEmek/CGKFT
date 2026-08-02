@@ -4,6 +4,13 @@ import { useActionState, useMemo, useState } from "react";
 import { yetkiKaydet, subeKapsamiKaydet } from "./yetki-actions";
 import { SAYFALAR, ROL_VARSAYILAN, KAPSAM_ETIKET, KAPSAM_ACIKLAMA } from "@/lib/yetkiler";
 import type { Rol, KapsamTuru } from "@/types/database";
+import {
+  SIKAYET_ROLLERI,
+  ROL_ETIKET as SIKAYET_ROL_ETIKET,
+  KAPSAM_ACIKLAMA as SIKAYET_KAPSAM_ACIKLAMA,
+  ROL_YETKISI,
+  type SikayetRolu,
+} from "@/lib/sikayet-rol";
 
 const girdiSinif =
   "rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2.5 py-1.5 text-sm";
@@ -26,6 +33,7 @@ export interface YetkiVerisi {
   kapsamTipi: string | null;
   kapsamYetkilisi: string | null;
   pozisyonId: string | null;
+  sikayetRolu: string | null;
   yazabilir: boolean;
   sayfaYetkileri: string[];
   seciliSubeIdler: string[];
@@ -62,6 +70,7 @@ export function YetkiPaneli({
   );
   const [yetkili, setYetkili] = useState(k.kapsamYetkilisi ?? "");
   const [pozisyon, setPozisyon] = useState(k.pozisyonId ?? "");
+  const [sikayetRolu, setSikayetRolu] = useState(k.sikayetRolu ?? "");
   const [secili, setSecili] = useState<Set<string>>(new Set(k.sayfaYetkileri));
   const [subeSecim, setSubeSecim] = useState<Set<string>>(new Set(k.seciliSubeIdler));
 
@@ -111,6 +120,56 @@ export function YetkiPaneli({
         <input type="hidden" name="kapsam_tipi" value={tip} />
         <input type="hidden" name="bolge" value={bolge} />
         <input type="hidden" name="kapsam_yetkilisi" value={yetkili} />
+
+        {/* Şikayet modülü rolü — genel rolden ayrı */}
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-neutral-500 mb-2">
+            Şikayet yönetimi rolü
+          </p>
+          <div className="flex flex-wrap items-start gap-3">
+            <label className="block">
+              <select
+                name="sikayet_rolu"
+                value={sikayetRolu}
+                onChange={(e) => setSikayetRolu(e.target.value)}
+                className={girdiSinif + " min-w-56"}
+              >
+                <option value="">— genel rolüne göre (varsayılan) —</option>
+                {SIKAYET_ROLLERI.map((r) => (
+                  <option key={r} value={r}>
+                    {SIKAYET_ROL_ETIKET[r]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="text-[11px] text-neutral-500 max-w-lg pt-2">
+              {sikayetRolu ? (
+                <>
+                  <b>{SIKAYET_KAPSAM_ACIKLAMA[ROL_YETKISI[sikayetRolu as SikayetRolu].kapsam]}.</b>{" "}
+                  {(
+                    [
+                      ["kayıt açar", ROL_YETKISI[sikayetRolu as SikayetRolu].kayitAcar],
+                      ["görev atar", ROL_YETKISI[sikayetRolu as SikayetRolu].atar],
+                      ["durum değiştirir", ROL_YETKISI[sikayetRolu as SikayetRolu].durumDegistirir],
+                      ["kapatır", ROL_YETKISI[sikayetRolu as SikayetRolu].kapatir],
+                      ["kök neden yazar", ROL_YETKISI[sikayetRolu as SikayetRolu].kokNedenYazar],
+                      ["siler", ROL_YETKISI[sikayetRolu as SikayetRolu].siler],
+                    ] as const
+                  )
+                    .filter(([, v]) => v)
+                    .map(([e]) => e)
+                    .join(", ") || "yalnızca görüntüler"}
+                  .
+                </>
+              ) : (
+                <>
+                  Boş bırakılırsa kişinin genel rolünden türetilir: admin → Admin, genel müdür →
+                  Yönetim, bölge müdürü → Bölge Müdürü, diğerleri → Operasyon.
+                </>
+              )}
+            </p>
+          </div>
+        </div>
 
         {/* Kişisel görünürlük — KPI, prim ve görev tanımı */}
         <div>

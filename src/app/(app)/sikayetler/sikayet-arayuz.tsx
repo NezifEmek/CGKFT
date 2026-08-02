@@ -13,6 +13,7 @@ import {
 } from "@/lib/sikayet";
 import type { Dosya } from "@/lib/dosya";
 import { DosyaEkleri } from "@/components/dosya-ekleri";
+import { durumIcinYetkiVar, type RolYetkisi } from "@/lib/sikayet-rol";
 import { YazdirDugmesi } from "@/components/yazdir-dugmesi";
 
 const gir =
@@ -44,7 +45,7 @@ function tarihYaz(t: string | null | undefined): string {
 }
 
 export function SikayetArayuz({
-  sikayetler, hareketler, atamalar, dosyalar, subeler, kisiler, benId, yonetimMi, bugun, tabloYok,
+  sikayetler, hareketler, atamalar, dosyalar, subeler, kisiler, benId, yetki, bugun, tabloYok,
 }: {
   sikayetler: Sikayet[];
   hareketler: Hareket[];
@@ -53,7 +54,7 @@ export function SikayetArayuz({
   subeler: { id: string; ad: string }[];
   kisiler: { id: string; ad_soyad: string }[];
   benId: string;
-  yonetimMi: boolean;
+  yetki: RolYetkisi;
   bugun: string;
   tabloYok: boolean;
 }) {
@@ -176,13 +177,15 @@ export function SikayetArayuz({
         />
         <button type="button" onClick={csvIndir} className={btnSade}>⬇ Excel (CSV)</button>
         <YazdirDugmesi baslik={`Sikayet-Raporu-${bugun}`} />
-        <button
-          type="button"
-          onClick={() => { setDuzenlenen(null); setFormAcik((v) => !v); }}
-          className={btn}
-        >
-          {formAcik && !duzenlenen ? "Vazgeç" : "＋ Şikayet kaydet"}
-        </button>
+        {yetki.kayitAcar && (
+          <button
+            type="button"
+            onClick={() => { setDuzenlenen(null); setFormAcik((v) => !v); }}
+            className={btn}
+          >
+            {formAcik && !duzenlenen ? "Vazgeç" : "＋ Şikayet kaydet"}
+          </button>
+        )}
       </div>
 
       {/* ── Filtreler ─────────────────────────────────────────────── */}
@@ -427,7 +430,7 @@ export function SikayetArayuz({
           subeAdlari={subeAdlari}
           bugun={bugun}
           benId={benId}
-          yonetimMi={yonetimMi}
+          yetki={yetki}
           kapat={() => setSeciliId(null)}
           duzenle={() => { setDuzenlenen(secili); setSeciliId(null); setFormAcik(true); }}
           eylemler={{ a2, p2, a3, p3, a4, p4, a5, p5 }}
@@ -597,7 +600,7 @@ function Trend({ veri }: { veri: { ay: string; acilan: number; kapanan: number }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function SikayetKarti({
-  s, hareketler, ekler, atananlar, kisiler, kisiAdlari, subeAdlari, bugun, yonetimMi,
+  s, hareketler, ekler, atananlar, kisiler, kisiAdlari, subeAdlari, bugun, yetki,
   kapat, duzenle, eylemler,
 }: {
   s: Sikayet;
@@ -609,7 +612,7 @@ function SikayetKarti({
   subeAdlari: Map<string, string>;
   bugun: string;
   benId: string;
-  yonetimMi: boolean;
+  yetki: RolYetkisi;
   kapat: () => void;
   duzenle: () => void;
   eylemler: Record<string, any>;
@@ -711,30 +714,38 @@ function SikayetKarti({
                 </form>
               )) : <span className="text-sm text-neutral-400">Henüz görevli yok.</span>}
             </div>
-            <form action={a4} className="flex items-center gap-2">
-              <input type="hidden" name="sikayet_id" value={s.id} />
-              <select name="profil_id" defaultValue="" required className={gir}>
-                <option value="" disabled>Kişi seçin…</option>
-                {kisiler.filter((k) => !atananlar.includes(k.id)).map((k) => (
-                  <option key={k.id} value={k.id}>{k.ad_soyad}</option>
-                ))}
-              </select>
-              <button type="submit" disabled={p4} className={btnSade}>Görevlendir</button>
-            </form>
+            {yetki.atar && (
+              <form action={a4} className="flex items-center gap-2">
+                <input type="hidden" name="sikayet_id" value={s.id} />
+                <select name="profil_id" defaultValue="" required className={gir}>
+                  <option value="" disabled>Kişi seçin…</option>
+                  {kisiler.filter((k) => !atananlar.includes(k.id)).map((k) => (
+                    <option key={k.id} value={k.id}>{k.ad_soyad}</option>
+                  ))}
+                </select>
+                <button type="submit" disabled={p4} className={btnSade}>Görevlendir</button>
+              </form>
+            )}
           </div>
 
-          {/* Durum */}
-          <form action={a2} className="space-y-2 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 p-3">
-            <input type="hidden" name="sikayet_id" value={s.id} />
-            <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">Durum değiştir</h4>
-            <select name="durum" defaultValue={s.durum} className={gir + " w-full"}>
-              {DURUMLAR.map((d) => <option key={d} value={d}>{DURUM_ETIKET[d]}</option>)}
-            </select>
-            <textarea name="cozum_notu" rows={2} defaultValue={s.cozum_notu}
-              placeholder="Çözüm notu (Çözüldü/Kapatıldı için zorunlu)" className={gir + " w-full"} />
-            <input name="kok_neden" defaultValue={s.kok_neden} placeholder="Kök neden" className={gir + " w-full"} />
-            <button type="submit" disabled={p2} className={btn}>Kaydet</button>
-          </form>
+          {/* Durum — yalnızca durum ilerletme ya da kapatma yetkisi olana */}
+          {(yetki.durumDegistirir || yetki.kapatir) && (
+            <form action={a2} className="space-y-2 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 p-3">
+              <input type="hidden" name="sikayet_id" value={s.id} />
+              <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">Durum değiştir</h4>
+              <select name="durum" defaultValue={s.durum} className={gir + " w-full"}>
+                {DURUMLAR.filter((d) => durumIcinYetkiVar(yetki, d)).map((d) => (
+                  <option key={d} value={d}>{DURUM_ETIKET[d]}</option>
+                ))}
+              </select>
+              <textarea name="cozum_notu" rows={2} defaultValue={s.cozum_notu}
+                placeholder="Çözüm notu (Çözüldü/Kapatıldı için zorunlu)" className={gir + " w-full"} />
+              {yetki.kokNedenYazar && (
+                <input name="kok_neden" defaultValue={s.kok_neden} placeholder="Kök neden" className={gir + " w-full"} />
+              )}
+              <button type="submit" disabled={p2} className={btn}>Kaydet</button>
+            </form>
+          )}
         </div>
 
         {/* İletişim geçmişi */}
@@ -793,7 +804,7 @@ function SikayetKarti({
         </div>
       </div>
 
-      {yonetimMi && (
+      {yetki.siler && (
         <form action={a5} className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
           <input type="hidden" name="sikayet_id" value={s.id} />
           <button type="submit" disabled={p5} className="text-sm text-red-600 hover:underline">

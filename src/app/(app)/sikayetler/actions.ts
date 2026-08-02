@@ -7,6 +7,7 @@ import {
   KANALLAR, BASVURAN_TURLERI, KATEGORILER, DURUMLAR, ONCELIKLER,
   DEPARTMANLAR, HAREKET_TURLERI,
 } from "@/lib/sikayet";
+import { yetkiCoz, durumIcinYetkiVar, KAPATMA_DURUMLARI } from "@/lib/sikayet-rol";
 
 type Sonuc = { hata?: string; ok?: string };
 const YOL = "/sikayetler";
@@ -22,8 +23,15 @@ function tabloHatasi(mesaj: string): string | null {
   return null;
 }
 
-export async function sikayetKaydet(_o: Sonuc | null, formData: FormData): Promise<Sonuc> {
+/** Kişinin şikayet yetkileri. Ekran gizlese de sunucu ayrıca denetler. */
+async function yetkim() {
   const profile = await requireProfile();
+  return { profile, y: yetkiCoz(profile.sikayet_rolu, profile.rol) };
+}
+
+export async function sikayetKaydet(_o: Sonuc | null, formData: FormData): Promise<Sonuc> {
+  const { profile, y } = await yetkim();
+  if (!y.kayitAcar) return { hata: "Şikayet kaydı açma yetkiniz yok." };
   const supabase = await createClient();
 
   const id = m(formData, "sikayet_id");
@@ -71,14 +79,22 @@ export async function sikayetKaydet(_o: Sonuc | null, formData: FormData): Promi
 
 /** Durum değişimi. Geçmiş kaydını trigger yazar. */
 export async function durumDegistir(_o: Sonuc | null, formData: FormData): Promise<Sonuc> {
-  const profile = await requireProfile();
+  const { profile, y } = await yetkim();
   const id = m(formData, "sikayet_id");
   const durum = m(formData, "durum");
   if (!id) return { hata: "Şikayet seçili değil." };
   if (!(DURUMLAR as readonly string[]).includes(durum)) return { hata: "Geçersiz durum." };
 
+  if (!durumIcinYetkiVar(y, durum)) {
+    return {
+      hata: (KAPATMA_DURUMLARI as readonly string[]).includes(durum)
+        ? "Şikayeti kapatma yetkiniz yok. Kapatma kararını Kalite, Operasyon, Bölge Müdürü ya da Yönetim verir."
+        : "Şikayetin durumunu değiştirme yetkiniz yok.",
+    };
+  }
+
   const cozumNotu = m(formData, "cozum_notu");
-  const kokNeden = m(formData, "kok_neden");
+  const kokNeden = y.kokNedenYazar ? m(formData, "kok_neden") : "";
 
   // Çözüm/kapanış için gerekçe iste: boş kapanan kayıt kök neden analizini
   // işe yaramaz hâle getirir.
@@ -104,7 +120,9 @@ export async function durumDegistir(_o: Sonuc | null, formData: FormData): Promi
 
 /** İletişim geçmişine satır ekler (görüşme, telefon notu, e-posta, iç not). */
 export async function hareketEkle(_o: Sonuc | null, formData: FormData): Promise<Sonuc> {
-  const profile = await requireProfile();
+  // Not yazmak her rolde serbest: franchise işletmecisi de kendi kaydına
+  // yanıt yazabilmeli. Kaydı görüp göremediğini RLS zaten belirliyor.
+  const { profile } = await yetkim();
   const id = m(formData, "sikayet_id");
   const metin = m(formData, "metin");
   if (!id) return { hata: "Şikayet seçili değil." };
@@ -125,7 +143,8 @@ export async function hareketEkle(_o: Sonuc | null, formData: FormData): Promise
 
 /** Görevlendirme. Birden fazla kişi atanabilir. */
 export async function atamaDegistir(_o: Sonuc | null, formData: FormData): Promise<Sonuc> {
-  const profile = await requireProfile();
+  const { profile, y } = await yetkim();
+  if (!y.atar) return { hata: "Görevlendirme yetkiniz yok." };
   const id = m(formData, "sikayet_id");
   const kisiId = m(formData, "profil_id");
   if (!id || !kisiId) return { hata: "Eksik bilgi." };
@@ -175,10 +194,8 @@ export async function atamaDegistir(_o: Sonuc | null, formData: FormData): Promi
 }
 
 export async function sikayetSil(_o: Sonuc | null, formData: FormData): Promise<Sonuc> {
-  const profile = await requireProfile();
-  if (profile.rol !== "admin" && profile.rol !== "genel_mudur") {
-    return { hata: "Şikayet silme yetkisi admin/genel müdürde." };
-  }
+  const { y } = await yetkim();
+  if (!y.siler) return { hata: "Şikayet silme yetkisi Admin ve Yönetim rolündedir." };
   const id = m(formData, "sikayet_id");
   if (!id) return { hata: "Şikayet seçili değil." };
 

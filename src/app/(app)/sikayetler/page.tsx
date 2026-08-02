@@ -4,6 +4,7 @@ import { tumSatirlariGetir, sonuclaGetir } from "@/lib/supabase/fetch-all";
 import type { Profile } from "@/types/database";
 import type { Sikayet } from "@/lib/sikayet";
 import type { Dosya } from "@/lib/dosya";
+import { yetkiCoz } from "@/lib/sikayet-rol";
 import { SikayetArayuz, type Hareket } from "./sikayet-arayuz";
 
 interface SubeKisa {
@@ -53,7 +54,9 @@ export default async function SikayetlerSayfasi() {
     supabase.from("profiles").select("id, ad_soyad").returns<Profile[]>(),
   ]);
 
-  const yonetimMi = profile.rol === "admin" || profile.rol === "genel_mudur";
+  // Şikayet yetkileri kişinin şikayet rolünden geliyor (0016); rol boşsa
+  // genel rolünden türetiliyor.
+  const yetki = yetkiCoz(profile.sikayet_rolu, profile.rol);
 
   return (
     <div className="space-y-4">
@@ -79,7 +82,7 @@ export default async function SikayetlerSayfasi() {
           .map((p) => ({ id: p.id, ad_soyad: p.ad_soyad || "(adsız)" }))
           .sort((a, b) => a.ad_soyad.localeCompare(b.ad_soyad, "tr"))}
         benId={profile.id}
-        yonetimMi={yonetimMi}
+        yetki={yetki}
         bugun={bugun}
         tabloYok={Boolean(sikayetSonuc.hata)}
       />

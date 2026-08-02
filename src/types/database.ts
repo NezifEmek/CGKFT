@@ -17,6 +17,8 @@ export interface Profile {
   kapsam_turu?: KapsamTuru;
   kapsam_tipi?: SubeTipi | null;
   kapsam_yetkilisi?: string | null;
+  /** Şikayet modülü rolü. NULL ise genel rolden türetilir (bkz. @/lib/sikayet-rol). */
+  sikayet_rolu?: string | null;
   /** dokuman_ayarlari.pozisyonlar içindeki pozisyon id'si — kişisel görünürlüğü belirler. */
   pozisyon_id?: string | null;
   yazabilir?: boolean;

@@ -87,6 +87,7 @@ export default async function KullanicilarSayfasi() {
         kapsamTipi: k.kapsam_tipi ?? null,
         kapsamYetkilisi: k.kapsam_yetkilisi ?? null,
         pozisyonId: k.pozisyon_id ?? null,
+        sikayetRolu: k.sikayet_rolu ?? null,
         yazabilir: k.yazabilir ?? false,
         sayfaYetkileri: Array.isArray(k.sayfa_yetkileri) ? k.sayfa_yetkileri : [],
         seciliSubeIdler: erisimMap.get(k.id) ?? [],

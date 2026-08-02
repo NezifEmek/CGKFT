@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SAYFALAR } from "@/lib/yetkiler";
+import { SIKAYET_ROLLERI } from "@/lib/sikayet-rol";
 
 type Sonuc = { hata?: string; ok?: string };
 
@@ -57,6 +58,12 @@ export async function yetkiKaydet(_onceki: Sonuc | null, formData: FormData): Pr
     };
   }
 
+  // Şikayet rolü: boş bırakılabilir, o zaman genel rolden türetilir.
+  const sikayetRoluHam = String(formData.get("sikayet_rolu") || "").trim();
+  if (sikayetRoluHam && !(SIKAYET_ROLLERI as readonly string[]).includes(sikayetRoluHam)) {
+    return { hata: "Geçersiz şikayet rolü." };
+  }
+
   const { error } = await admin
     .from("profiles")
     .update({
@@ -65,12 +72,16 @@ export async function yetkiKaydet(_onceki: Sonuc | null, formData: FormData): Pr
       kapsam_yetkilisi: kapsamTuru === "yetkili" ? kapsamYetkilisi : null,
       pozisyon_id: String(formData.get("pozisyon_id") || "").trim() || null,
       bolge: kapsamTuru === "bolge" ? bolge : (bolge || null),
+      sikayet_rolu: sikayetRoluHam || null,
       yazabilir,
       sayfa_yetkileri: sayfalar,
     })
     .eq("id", id);
 
   if (error) {
+    if (/sikayet_rolu/.test(error.message)) {
+      return { hata: "Şikayet rolü alanı veritabanında yok. 0016_sikayet_rol.sql çalıştırılmalı." };
+    }
     if (/column .* does not exist/i.test(error.message)) {
       return {
         hata: "Yetki alanları veritabanında yok. 0004_yetkilendirme.sql çalıştırılmalı.",
