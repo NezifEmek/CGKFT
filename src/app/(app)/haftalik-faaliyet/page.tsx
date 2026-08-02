@@ -132,7 +132,14 @@ export default async function HaftalikFaaliyetSayfasi({
       )
     : null;
 
-  const tumKisiler = (profiller ?? []).map((p) => ({ id: p.id, ad_soyad: p.ad_soyad || "" }));
+  // Yönetim bu raporda yer almaz (Nezif: Ramazan, Ersin Koray, Erdi ve
+  // kendisi çıkarılsın). Ad ad yazmak yerine role bağlandı — bugün admin
+  // olan tam olarak o dört kişi ve kadro değiştiğinde liste kendiliğinden
+  // doğru kalır. Rapor saha faaliyetini ölçüyor; yönetimin işi burada
+  // görünen türden kayıt üretmiyor.
+  const tumKisiler = (profiller ?? [])
+    .filter((p) => p.rol !== "admin")
+    .map((p) => ({ id: p.id, ad_soyad: p.ad_soyad || "" }));
   const kisiler = gorunurAdlar
     ? tumKisiler.filter(
         // Kendisi her hâlükârda görünür; pozisyonu eşleşmeyen kimse kaybolmasın diye

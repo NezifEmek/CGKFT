@@ -1,6 +1,6 @@
 import { requireProfile } from "@/lib/auth";
 import { ROL_ETIKET } from "@/types/database";
-import { SAYFALAR, gorunurSayfalar } from "@/lib/yetkiler";
+import { SAYFALAR, BOLUM_SIRASI, gorunurSayfalar } from "@/lib/yetkiler";
 import { cikisYap } from "./actions";
 import { YanMenuLinkleri, type MenuOgesi } from "./yan-menu";
 
@@ -13,6 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const menu: MenuOgesi[] = SAYFALAR.filter((s) => izinli.has(s.anahtar)).map((s) => ({
     href: s.href,
     etiket: s.etiket,
+    bolum: s.bolum,
   }));
 
   return (
@@ -42,7 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </div>
 
-        <YanMenuLinkleri ogeler={menu} />
+        <YanMenuLinkleri ogeler={menu} bolumler={BOLUM_SIRASI} />
 
         <form action={cikisYap} className="px-2 pb-4 pt-2 border-t border-white/10">
           <button

@@ -16,42 +16,65 @@ export interface SayfaTanimi {
   bolum: string;
 }
 
+/**
+ * Menü bölümlerinin sırası ve simgesi.
+ *
+ * Menü 27 satıra çıkınca tek düz liste okunmaz hâle geldi. Artık bölümler
+ * açılır kapanır. "Raporlar" bilerek ayrı bir başlık: kullanıcı "rapor
+ * almak istiyorum" diye düşünüyor, "segmentasyon ekranına gideyim" diye
+ * değil — sık kullanılan görüntüleme ekranları tek yerde toplandı.
+ */
+export const BOLUM_SIRASI: { ad: string; simge: string; acikVarsayilan: boolean }[] = [
+  { ad: "Genel", simge: "🏠", acikVarsayilan: true },
+  { ad: "Raporlar", simge: "📊", acikVarsayilan: true },
+  { ad: "Şube", simge: "🏪", acikVarsayilan: false },
+  { ad: "Denetim", simge: "📋", acikVarsayilan: false },
+  { ad: "Finans", simge: "💰", acikVarsayilan: false },
+  { ad: "Üretim", simge: "🏭", acikVarsayilan: false },
+  { ad: "Kurumsal", simge: "🏛️", acikVarsayilan: false },
+  { ad: "Veri", simge: "🗄️", acikVarsayilan: false },
+  { ad: "Yönetim", simge: "⚙️", acikVarsayilan: false },
+];
+
 /** Menüdeki tüm ekranlar. Sıra menüde göründüğü sıradır. */
 export const SAYFALAR: SayfaTanimi[] = [
   { anahtar: "genel", href: "/", etiket: "📊 Genel Bakış", bolum: "Genel" },
-  { anahtar: "subeler", href: "/subeler", etiket: "🏪 Şubeler", bolum: "Genel" },
-  { anahtar: "sube-yonetimi", href: "/sube-yonetimi", etiket: "⚙️ Şube Yönetimi", bolum: "Genel" },
 
-  { anahtar: "top30", href: "/top30", etiket: "🏆 Top 30 Şube", bolum: "Analiz" },
-  { anahtar: "yoy", href: "/yoy-karsilastirma", etiket: "📈 2026 vs 2025", bolum: "Analiz" },
-  { anahtar: "aylik-degisim", href: "/aylik-degisim", etiket: "🔀 Aylık Değişim Analizi", bolum: "Analiz" },
-  { anahtar: "kpi", href: "/kpi-takibi", etiket: "🎯 KPI Takibi", bolum: "Analiz" },
-  { anahtar: "yetkili-analizi", href: "/yetkili-analizi", etiket: "🧑‍💼 Yetkili Analizi", bolum: "Analiz" },
-  { anahtar: "segmentasyon", href: "/segmentasyon", etiket: "⭐ Segmentasyon", bolum: "Analiz" },
-  { anahtar: "segment-takibi", href: "/segment-takibi", etiket: "🧭 Segment Takibi", bolum: "Analiz" },
-  { anahtar: "dusus", href: "/dusus-uyarilari", etiket: "🚨 Düşüş Uyarıları", bolum: "Analiz" },
-  { anahtar: "bolge-analizi", href: "/bolge-analizi", etiket: "🗺️ Bölge Analizi", bolum: "Analiz" },
+  // Raporlar: "rapor almak istiyorum" diye düşünen kullanıcının tek durağı.
+  { anahtar: "top30", href: "/top30", etiket: "🏆 Top 30 Şube", bolum: "Raporlar" },
+  { anahtar: "yoy", href: "/yoy-karsilastirma", etiket: "📈 2026 vs 2025", bolum: "Raporlar" },
+  { anahtar: "aylik-degisim", href: "/aylik-degisim", etiket: "🔀 Aylık Değişim", bolum: "Raporlar" },
+  { anahtar: "bolge-analizi", href: "/bolge-analizi", etiket: "🗺️ Bölge Analizi", bolum: "Raporlar" },
+  { anahtar: "segmentasyon", href: "/segmentasyon", etiket: "⭐ Segmentasyon", bolum: "Raporlar" },
+  { anahtar: "segment-takibi", href: "/segment-takibi", etiket: "🧭 Segment Takibi", bolum: "Raporlar" },
+  { anahtar: "dusus", href: "/dusus-uyarilari", etiket: "🚨 Düşüş Uyarıları", bolum: "Raporlar" },
+  { anahtar: "kpi", href: "/kpi-takibi", etiket: "🎯 KPI Takibi", bolum: "Raporlar" },
+  { anahtar: "yetkili-analizi", href: "/yetkili-analizi", etiket: "🧑‍💼 Yetkili Analizi", bolum: "Raporlar" },
+  { anahtar: "haftalik-faaliyet", href: "/haftalik-faaliyet", etiket: "📅 Haftalık Faaliyet", bolum: "Raporlar" },
+
+  { anahtar: "subeler", href: "/subeler", etiket: "🏪 Şube Listesi", bolum: "Şube" },
+  { anahtar: "sube-yonetimi", href: "/sube-yonetimi", etiket: "⚙️ Şube Yönetimi", bolum: "Şube" },
+  { anahtar: "franchise-basvuru", href: "/franchise-basvurulari", etiket: "📨 Franchise Başvuruları", bolum: "Şube" },
 
   { anahtar: "sube-denetimi", href: "/sube-denetimi", etiket: "📋 Şube Denetimi", bolum: "Denetim" },
   { anahtar: "hizli-skor", href: "/hizli-skor", etiket: "⚡ Hızlı Skor Girişi", bolum: "Denetim" },
-
-  { anahtar: "aylar-veri", href: "/aylar-veri", etiket: "🗓️ Aylar & Veri", bolum: "Veri" },
-  { anahtar: "ice-disa-aktar", href: "/ice-disa-aktar", etiket: "📥 İçe / Dışa Aktar", bolum: "Veri" },
+  { anahtar: "sikayetler", href: "/sikayetler", etiket: "📣 Şikayet Yönetimi", bolum: "Denetim" },
 
   { anahtar: "ciro-karlilik", href: "/ciro-karlilik", etiket: "💰 Ciro & Kârlılık", bolum: "Finans" },
-  { anahtar: "merkez-gg", href: "/merkez-gelir-gider", etiket: "💹 Merkez Şube Gelir-Gider", bolum: "Finans" },
+  { anahtar: "merkez-gg", href: "/merkez-gelir-gider", etiket: "💹 Merkez Gelir-Gider", bolum: "Finans" },
   { anahtar: "prim-hakedis", href: "/prim-hakedis", etiket: "💵 Prim Hakediş", bolum: "Finans" },
   { anahtar: "prim-projeksiyon", href: "/prim-projeksiyon", etiket: "📉 Prim Projeksiyonu", bolum: "Finans" },
 
+  { anahtar: "uretim", href: "/uretim", etiket: "🏭 Günlük Üretim", bolum: "Üretim" },
+
   { anahtar: "toplantilar", href: "/toplantilar", etiket: "🗓️ Toplantı Yönetimi", bolum: "Kurumsal" },
-  { anahtar: "haftalik-faaliyet", href: "/haftalik-faaliyet", etiket: "📅 Haftalık Faaliyet", bolum: "Kurumsal" },
-  { anahtar: "franchise-basvuru", href: "/franchise-basvurulari", etiket: "📨 Franchise Başvuruları", bolum: "Kurumsal" },
-  { anahtar: "sikayetler", href: "/sikayetler", etiket: "📣 Şikayet Yönetimi", bolum: "Kurumsal" },
-  { anahtar: "uretim", href: "/uretim", etiket: "🏭 Günlük Üretim", bolum: "Kurumsal" },
-  { anahtar: "dokuman", href: "/dokuman", etiket: "📄 Doküman Yönetimi", bolum: "Kurumsal" },
   { anahtar: "organizasyon", href: "/organizasyon", etiket: "🏛️ Organizasyon Şeması", bolum: "Kurumsal" },
+  { anahtar: "dokuman", href: "/dokuman", etiket: "📄 Görev Tanımları", bolum: "Kurumsal" },
   { anahtar: "oneriler", href: "/oneriler", etiket: "💡 Öneriler", bolum: "Kurumsal" },
   { anahtar: "trello", href: "/trello", etiket: "🗂️ Trello", bolum: "Kurumsal" },
+
+  { anahtar: "aylar-veri", href: "/aylar-veri", etiket: "🗓️ Aylar & Veri", bolum: "Veri" },
+  { anahtar: "ice-disa-aktar", href: "/ice-disa-aktar", etiket: "📥 İçe / Dışa Aktar", bolum: "Veri" },
 
   { anahtar: "kullanicilar", href: "/kullanicilar", etiket: "👥 Kullanıcılar", bolum: "Yönetim" },
 ];

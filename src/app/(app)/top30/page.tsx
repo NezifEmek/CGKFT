@@ -102,6 +102,7 @@ export default async function Top30Sayfasi({
             <tr>
               <th className="px-4 py-2">#</th>
               <th className="px-4 py-2">Şube</th>
+              <th className="px-4 py-2">İl / İlçe</th>
               <th className="px-4 py-2">Bölge</th>
               <th className="px-4 py-2 text-right">Toplam Kg</th>
               <th className="px-4 py-2 text-right">Kg/Gün</th>
@@ -118,6 +119,10 @@ export default async function Top30Sayfasi({
               >
                 <td className="px-4 py-2 text-neutral-400">{i + 1}</td>
                 <td className="px-4 py-2 font-medium">{row.sube.ad}</td>
+                <td className="px-4 py-2 text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
+                  {row.sube.il || "—"}
+                  {row.sube.ilce ? <span className="text-neutral-400"> / {row.sube.ilce}</span> : null}
+                </td>
                 <td className="px-4 py-2 text-neutral-600 dark:text-neutral-400">{row.sube.bolge}</td>
                 <td className="px-4 py-2 text-right">{kgFmt(row.toplamKg)}</td>
                 <td className="px-4 py-2 text-right">{row.kgGunluk.toFixed(1)}</td>

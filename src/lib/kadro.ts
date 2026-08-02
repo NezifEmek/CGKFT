@@ -58,11 +58,23 @@ export interface PozisyonKisa {
   doluMu: boolean;
 }
 
-/** Ay "2026-08" biçiminde. Atama o ay içinde en az bir gün geçerli mi? */
+/**
+ * Ay "2026-08" biçiminde. Kişi o ayın primine giriyor mu?
+ *
+ * KURAL (Nezif): "Yeni başlayan personelin birimi sonraki aydan itibaren
+ * başlamalı." Yani göreve başlanan AY prime dahil değil; kişi ancak ayın
+ * ilk gününde çoktan görevdeyse o ayın havuzundan pay alır. 15 Ağustos'ta
+ * başlayan da 1 Ağustos'ta başlayan da ilk primini EYLÜL'de alır.
+ *
+ * Ayrılışta simetrik davranmıyoruz: ayın başında görevdeyse o ayı alır,
+ * ay içinde ayrılsa bile. Ay ortasında ayrılanın hakkını silmek, ay
+ * ortasında başlayana pay vermemekle aynı şey değil.
+ */
 export function aydaGorevliMi(a: Pick<Atama, "baslangic" | "bitis">, ay: string): boolean {
   const ayBas = `${ay}-01`;
-  const ayBit = ayinSonGunu(ay);
-  if (a.baslangic && a.baslangic.slice(0, 10) > ayBit) return false;
+  // Başlangıç boşsa "her zaman görevdeydi" sayılır (geçişte tarihi
+  // bilinmeyen kayıtlar için).
+  if (a.baslangic && a.baslangic.slice(0, 10) >= ayBas) return false;
   if (a.bitis && a.bitis.slice(0, 10) < ayBas) return false;
   return true;
 }

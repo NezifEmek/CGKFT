@@ -219,6 +219,7 @@ export default async function YoyKarsilastirmaSayfasi({
           <thead className="bg-neutral-50 dark:bg-neutral-800/50 text-left text-xs text-neutral-500">
             <tr>
               <th className="px-4 py-2">Şube</th>
+              <th className="px-4 py-2">İl / İlçe</th>
               <th className="px-4 py-2">Bölge</th>
               <th className="px-4 py-2 text-right">{CARI_YIL}</th>
               <th className="px-4 py-2 text-right">{ONCEKI_YIL}</th>
@@ -230,6 +231,10 @@ export default async function YoyKarsilastirmaSayfasi({
             {subeSatirlari.map((s) => (
               <tr key={s.sube.id} className="border-t border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/40">
                 <td className="px-4 py-2 font-medium">{s.sube.ad}</td>
+                <td className="px-4 py-2 text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
+                  {s.sube.il || "—"}
+                  {s.sube.ilce ? <span className="text-neutral-400"> / {s.sube.ilce}</span> : null}
+                </td>
                 <td className="px-4 py-2 text-neutral-600 dark:text-neutral-400">{s.sube.bolge}</td>
                 <td className="px-4 py-2 text-right">{kgFmt(s.cari)}</td>
                 <td className="px-4 py-2 text-right">{kgFmt(s.onceki)}</td>
