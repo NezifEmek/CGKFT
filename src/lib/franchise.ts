@@ -120,6 +120,9 @@ export interface FranchiseBasvuru {
   memnuniyet_neticesi: string;
   memnuniyet_notu: string;
   kalite_puani: number;
+  /** 0014: bu başvurudan açılan şube. Boşsa henüz şubeye dönüşmemiş. */
+  sube_id?: string | null;
+  sube_acilis_at?: string | null;
   created_at?: string;
   updated_at?: string;
 }

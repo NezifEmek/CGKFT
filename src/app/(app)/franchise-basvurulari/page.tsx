@@ -25,6 +25,29 @@ export default async function FranchiseBasvurulariSayfasi() {
     ...new Set(basvurular.map((b) => b.sirket_sorumlusu).filter(Boolean)),
   ].sort((a, b) => a.localeCompare(b, "tr"));
 
+  // Şube açma paneli için: bölge ve merkez yetkilisi seçenekleri, ve
+  // hâlihazırda açılmış şubelerin adları.
+  const subeler = await tumSatirlariGetir<{
+    id: string;
+    ad: string;
+    bolge: string;
+    merkez_yetkilisi: string;
+  }>((from, to) =>
+    supabase
+      .from("subeler")
+      .select("id, ad, bolge, merkez_yetkilisi")
+      .range(from, to)
+      .returns<{ id: string; ad: string; bolge: string; merkez_yetkilisi: string }[]>(),
+  ).catch(() => []);
+
+  const bolgeler = [...new Set(subeler.map((s) => s.bolge).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, "tr"),
+  );
+  const yetkililer = [...new Set(subeler.map((s) => s.merkez_yetkilisi).filter(Boolean))].sort(
+    (a, b) => a.localeCompare(b, "tr"),
+  );
+  const subeAdlari = Object.fromEntries(subeler.map((s) => [s.id, s.ad]));
+
   const yazabilir = !tabloYok && profile.rol !== "denetmen";
   const silebilir = profile.rol === "admin" || profile.rol === "genel_mudur";
 
@@ -50,6 +73,9 @@ export default async function FranchiseBasvurulariSayfasi() {
           sorumlular={sorumlular}
           yazabilir={yazabilir}
           silebilir={silebilir}
+          bolgeler={bolgeler}
+          yetkililer={yetkililer}
+          subeAdlari={subeAdlari}
         />
       )}
     </div>

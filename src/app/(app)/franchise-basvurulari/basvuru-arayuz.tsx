@@ -2,6 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { basvuruEkle, basvuruGuncelle, basvuruSil } from "./actions";
+import { SubeAcPaneli } from "./sube-ac-paneli";
 import {
   DURUMLAR,
   DURUM_RENK,
@@ -219,11 +220,17 @@ export function BasvuruArayuz({
   sorumlular,
   yazabilir,
   silebilir,
+  bolgeler,
+  yetkililer,
+  subeAdlari,
 }: {
   basvurular: FranchiseBasvuru[];
   sorumlular: string[];
   yazabilir: boolean;
   silebilir: boolean;
+  bolgeler: string[];
+  yetkililer: string[];
+  subeAdlari: Record<string, string>;
 }) {
   const [ekleAcik, setEkleAcik] = useState(false);
   const [acikId, setAcikId] = useState<string | null>(null);
@@ -385,6 +392,25 @@ export function BasvuruArayuz({
                 {acikId === b.id && (
                   <tr key={b.id + "-detay"} className="bg-neutral-50 dark:bg-neutral-800/40">
                     <td colSpan={9} className="px-4 py-4">
+                      {yazabilir && (
+                        <div className="max-w-5xl mb-3">
+                          <SubeAcPaneli
+                            basvuru={{
+                              id: b.id,
+                              isim: b.isim,
+                              telefon: b.telefon ?? "",
+                              il: b.il ?? "",
+                              ilce: b.ilce ?? "",
+                              sube_id: b.sube_id ?? null,
+                              sube_acilis_at: b.sube_acilis_at ?? null,
+                            }}
+                            bolgeler={bolgeler}
+                            yetkililer={yetkililer}
+                            subeAdi={b.sube_id ? (subeAdlari[b.sube_id] ?? null) : null}
+                            silebilir={silebilir}
+                          />
+                        </div>
+                      )}
                       {yazabilir ? (
                         <form action={guncelleAction} className="space-y-3 max-w-5xl">
                           <input type="hidden" name="basvuru_id" value={b.id} />

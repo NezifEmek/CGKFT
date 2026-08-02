@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { subeKoduUret, kodDenetle, KOD_DESENI } from "@/lib/sube-kod";
+import type { Sube } from "@/types/database";
 import { DURUMLAR, KANALLAR, KAYIP_NEDENLERI, MEMNUNIYET, PUANLI_ALANLAR } from "@/lib/franchise";
 
 type Sonuc = { hata?: string; ok?: string };
@@ -135,4 +138,179 @@ export async function basvuruSil(_onceki: Sonuc | null, formData: FormData): Pro
 
   revalidatePath("/franchise-basvurulari");
   return { ok: "Başvuru silindi" };
+}
+
+// ─── Başvurudan şube açma ─────────────────────────────────────────────────
+
+/**
+ * Şube kodu önizlemesi. Sıra no il genelinde tek sayaç olduğu için doğru
+ * numarayı bulmak TÜM şubeleri görmeyi gerektirir; bölge müdürünün RLS
+ * görüşü kendi bölgesiyle sınırlı olduğundan sayaç service_role ile okunur.
+ */
+export async function acilisKoduOnizle(
+  il: string,
+  ilce: string,
+): Promise<{ kod: string | null; hata: string | null }> {
+  await requireProfile();
+  if (!il.trim() || !ilce.trim()) return { kod: null, hata: null };
+
+  const admin = createAdminClient();
+  const { data } = await admin.from("subeler").select("id, ad, kod, tip, il, ilce").returns<Sube[]>();
+  const sonuc = subeKoduUret("FR", il.trim(), ilce.trim(), data ?? []);
+  return { kod: sonuc.kod, hata: sonuc.hata };
+}
+
+/**
+ * Onaylanan başvurudan şube açar ve ikisini birbirine bağlar.
+ *
+ * Başvurunun bilgileri şubeye taşınır: başvuran kişi şube yetkilisi,
+ * telefonu yetkili cebi olur. Böylece aynı bilgi ikinci kez girilmez.
+ *
+ * Sorumlu geçmişi (0010) trigger'ı kendiliğinden çalışır — açılışta
+ * kimin görevli olduğu geçmişe düşer.
+ */
+export async function basvurudanSubeAc(_onceki: Sonuc | null, formData: FormData): Promise<Sonuc> {
+  const profile = await yazabilirMi();
+  if (!profile) return { hata: "Şube açma yetkiniz yok." };
+
+  const s = (ad: string) => String(formData.get(ad) ?? "").trim();
+  const basvuruId = s("basvuru_id");
+  if (!basvuruId) return { hata: "Başvuru seçili değil." };
+
+  const supabase = await createClient();
+  const { data: basvuru, error: okumaHata } = await supabase
+    .from("franchise_basvurulari")
+    .select("id, isim, telefon, il, ilce, sube_id")
+    .eq("id", basvuruId)
+    .maybeSingle<{
+      id: string;
+      isim: string;
+      telefon: string | null;
+      il: string | null;
+      ilce: string | null;
+      sube_id: string | null;
+    }>();
+
+  if (okumaHata) {
+    if (/column .* sube_id .* does not exist/i.test(okumaHata.message)) {
+      return { hata: "Bağlantı sütunu yok — 0014_franchise_sube.sql çalıştırılmalı." };
+    }
+    return { hata: "Başvuru okunamadı: " + okumaHata.message };
+  }
+  if (!basvuru) return { hata: "Başvuru bulunamadı." };
+  if (basvuru.sube_id) return { hata: "Bu başvurudan zaten bir şube açılmış." };
+
+  const ad = s("ad") || basvuru.isim;
+  const il = s("il") || basvuru.il || "";
+  const ilce = s("ilce") || basvuru.ilce || "";
+  const bolge = s("bolge");
+
+  if (!ad) return { hata: "Şube adı zorunlu." };
+  if (!bolge) return { hata: "Bölge seçilmeli." };
+  if (!il || !ilce) return { hata: "İl ve ilçe olmadan şube kodu üretilemez." };
+
+  // Kod: elle girildiyse doğrula, girilmediyse üret.
+  const admin = createAdminClient();
+  const { data: tumSubeler } = await admin
+    .from("subeler")
+    .select("id, ad, kod, tip, il, ilce")
+    .returns<Sube[]>();
+  const hepsi = tumSubeler ?? [];
+
+  const elleKod = s("kod").toLocaleUpperCase("tr");
+  let kod = "";
+  let siraNo = "";
+
+  if (elleKod) {
+    const denetim = kodDenetle(elleKod, "FR", il, ilce, hepsi);
+    const engelleyen = denetim.hatalar.filter(
+      (h) => h.includes("kullanılıyor") || h.includes("formatı"),
+    );
+    if (engelleyen.length) return { hata: engelleyen.join(" ") };
+    kod = elleKod;
+    siraNo = elleKod.match(KOD_DESENI)?.[3] ?? "";
+  } else {
+    const uretim = subeKoduUret("FR", il, ilce, hepsi);
+    if (uretim.hata) return { hata: "Kod üretilemedi: " + uretim.hata };
+    kod = uretim.kod!;
+    siraNo = String(uretim.siraNo).padStart(3, "0");
+  }
+
+  const acilisTarihi = /^\d{4}-\d{2}-\d{2}$/.test(s("acilis_tarihi")) ? s("acilis_tarihi") : null;
+
+  const { data: yeniSube, error: subeHata } = await supabase
+    .from("subeler")
+    .insert({
+      ad,
+      tip: "FR",
+      bolge,
+      il,
+      ilce,
+      kod,
+      il_sube_sirasi: siraNo,
+      merkez_yetkilisi: s("merkez_yetkilisi"),
+      // Başvuran kişi şubenin işletmecisi olur.
+      sube_yetkilisi: basvuru.isim,
+      yetkili_telefon: basvuru.telefon ?? "",
+      aktif: true,
+      acilis_tarihi: acilisTarihi,
+      acilis_tahmini: formData.get("acilis_tahmini") === "on",
+      fiyat_grubu: s("fiyat_grubu") === "lojistik" ? "lojistik" : "dagitim",
+    })
+    .select("id, kod")
+    .maybeSingle<{ id: string; kod: string }>();
+
+  if (subeHata) {
+    if (/column .* does not exist/i.test(subeHata.message)) {
+      return { hata: "Şube alanları eksik — 0010_sube_ana_veri.sql çalıştırılmalı." };
+    }
+    return { hata: "Şube açılamadı: " + subeHata.message };
+  }
+  if (!yeniSube) return { hata: "Şube oluşturuldu ama kaydı okunamadı." };
+
+  // Başvuruyu şubeye bağla. Bu adım başarısız olursa şube ortada kalır —
+  // kullanıcıya açıkça söylenmeli, sessizce geçilmemeli.
+  const { error: bagHata } = await supabase
+    .from("franchise_basvurulari")
+    .update({
+      sube_id: yeniSube.id,
+      sube_acilis_at: new Date().toISOString(),
+      son_durum: "Sözleşme / Açılış",
+      guncelleyen_id: profile.id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", basvuruId);
+
+  revalidatePath("/franchise-basvurulari");
+  revalidatePath("/subeler");
+  revalidatePath("/sube-yonetimi");
+  revalidatePath("/");
+
+  if (bagHata) {
+    return {
+      hata: `Şube ${yeniSube.kod} koduyla açıldı ancak başvuruya bağlanamadı (${bagHata.message}). Şubeler ekranından kontrol edin.`,
+    };
+  }
+
+  return { ok: `Şube açıldı: ${ad} — ${yeniSube.kod}` };
+}
+
+/** Yanlışlıkla kurulan bağı kaldırır. Şubeyi SİLMEZ. */
+export async function subeBagiKaldir(_onceki: Sonuc | null, formData: FormData): Promise<Sonuc> {
+  const profile = await requireProfile();
+  if (profile.rol !== "admin" && profile.rol !== "genel_mudur") {
+    return { hata: "Bağlantıyı kaldırma yetkisi admin/genel müdürde." };
+  }
+  const id = String(formData.get("basvuru_id") ?? "");
+  if (!id) return { hata: "Başvuru seçili değil." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("franchise_basvurulari")
+    .update({ sube_id: null, sube_acilis_at: null, guncelleyen_id: profile.id })
+    .eq("id", id);
+
+  if (error) return { hata: "Kaldırılamadı: " + error.message };
+  revalidatePath("/franchise-basvurulari");
+  return { ok: "Bağlantı kaldırıldı — şube silinmedi, duruyor." };
 }
