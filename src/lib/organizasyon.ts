@@ -232,7 +232,7 @@ export function gorunurPozisyonlar(
  * yazabiliyor ("Ümran Balci" ↔ "Ümran BALCI", "Hüseyin Akı" ↔ "Hüseyin AKİ").
  * i/ı ve İ/I ayrımına takılmamak için hepsi I'ya çevriliyor.
  */
-function asciiKatla(s: string): string {
+export function asciiKatla(s: string): string {
   return s
     .toLocaleUpperCase("tr")
     .replace(/[İIıi]/g, "I")
