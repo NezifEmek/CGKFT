@@ -116,6 +116,10 @@ export interface FranchiseBasvuru {
   sorumlu_arama_tarihi: string | null;
   kaybetme_nedeni: string;
   gorusme_notu: string;
+  adres: string;
+  harita_url: string;
+  enlem: number | null;
+  boylam: number | null;
   memnuniyet_arama_tarihi: string | null;
   memnuniyet_neticesi: string;
   memnuniyet_notu: string;

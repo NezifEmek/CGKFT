@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import { basvuruEkle, basvuruGuncelle, basvuruSil, topluSorumluAta } from "./actions";
 import { SubeAcPaneli } from "./sube-ac-paneli";
+import { GorusmePaneli, type Gorusme } from "./gorusme-paneli";
 import {
   DURUMLAR,
   DURUM_RENK,
@@ -186,8 +187,33 @@ function Alanlar({ b, kisiler }: { b?: FranchiseBasvuru; kisiler: string[] }) {
         )}
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <label className="block">
+          <span className="block text-xs text-neutral-500 mb-1">Adres</span>
+          <textarea name="adres" rows={2} defaultValue={b?.adres ?? ""} className={gir + " w-full"} />
+        </label>
+        <label className="block">
+          <span className="block text-xs text-neutral-500 mb-1">Google Maps bağlantısı</span>
+          <input
+            name="harita_url"
+            defaultValue={b?.harita_url ?? ""}
+            placeholder="Paylaş → Bağlantıyı kopyala"
+            className={gir + " w-full"}
+          />
+          <span className="block text-[11px] text-neutral-400 mt-1">
+            Koordinat bağlantının içinden okunur.
+            {b?.enlem != null && (
+              <> Kayıtlı: <span className="font-mono">{b.enlem}, {b.boylam}</span></>
+            )}
+          </span>
+        </label>
+      </div>
+
       <label className="block">
-        <span className="block text-xs text-neutral-500 mb-1">Görüşme notu</span>
+        <span className="block text-xs text-neutral-500 mb-1">
+          İlk görüşme notu
+          <span className="text-neutral-400"> — sonraki görüşmeler aşağıdaki listeden eklenir</span>
+        </span>
         <textarea name="gorusme_notu" rows={2} defaultValue={b?.gorusme_notu} className={gir + " w-full"} />
       </label>
 
@@ -232,6 +258,8 @@ export function BasvuruArayuz({
   bolgeler,
   yetkililer,
   subeAdlari,
+  gorusmeler,
+  bugun,
 }: {
   basvurular: FranchiseBasvuru[];
   sorumlular: string[];
@@ -241,6 +269,8 @@ export function BasvuruArayuz({
   bolgeler: string[];
   yetkililer: string[];
   subeAdlari: Record<string, string>;
+  gorusmeler: Gorusme[];
+  bugun: string;
 }) {
   const [ekleAcik, setEkleAcik] = useState(false);
   const [acikId, setAcikId] = useState<string | null>(null);
@@ -506,6 +536,16 @@ export function BasvuruArayuz({
                           <p className="text-xs text-neutral-400">Düzenleme yetkiniz yok.</p>
                         </div>
                       )}
+
+                      {/* Görüşme geçmişi — düzenleme yetkisi olmasa da görünür */}
+                      <GorusmePaneli
+                        basvuruId={b.id}
+                        gorusmeler={gorusmeler.filter((g) => g.basvuru_id === b.id)}
+                        kisiler={sorumlular}
+                        bugun={bugun}
+                        duzenlenebilir={yazabilir}
+                        silebilir={silebilir}
+                      />
                     </td>
                   </tr>
                 )}

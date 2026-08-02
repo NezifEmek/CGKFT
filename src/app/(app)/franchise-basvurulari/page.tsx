@@ -3,6 +3,7 @@ import { requireProfile } from "@/lib/auth";
 import { tumSatirlariGetir, sonuclaGetir } from "@/lib/supabase/fetch-all";
 import type { FranchiseBasvuru } from "@/lib/franchise";
 import { BasvuruArayuz } from "./basvuru-arayuz";
+import type { Gorusme } from "./gorusme-paneli";
 
 export default async function FranchiseBasvurulariSayfasi() {
   const profile = await requireProfile();
@@ -20,6 +21,17 @@ export default async function FranchiseBasvurulariSayfasi() {
   );
   const basvurular = basvuruSonuc.veri;
   const tabloYok = Boolean(basvuruSonuc.hata);
+
+  // Görüşmeler ayrı tabloda (0020). Tablo yoksa boş gelir, panel "kayıt yok"
+  // der ve ekranın kalanı çalışmaya devam eder.
+  const gorusmeler = await tumSatirlariGetir<Gorusme>((from, to) =>
+    supabase
+      .from("franchise_gorusmeleri")
+      .select("*")
+      .order("tarih", { ascending: false })
+      .range(from, to)
+      .returns<Gorusme[]>(),
+  ).catch(() => [] as Gorusme[]);
 
   // Sorumlu artık serbest metin değil, sistemdeki kişilerden seçiliyor.
   // Serbest metin olduğu sürece "Genel Ekip" gibi kişi olmayan değerler
@@ -93,6 +105,8 @@ export default async function FranchiseBasvurulariSayfasi() {
           bolgeler={bolgeler}
           yetkililer={yetkililer}
           subeAdlari={subeAdlari}
+          gorusmeler={gorusmeler}
+          bugun={new Date().toISOString().slice(0, 10)}
         />
       )}
     </div>

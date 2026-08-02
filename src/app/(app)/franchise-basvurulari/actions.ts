@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { subeKoduUret, kodDenetle, KOD_DESENI } from "@/lib/sube-kod";
 import type { Sube } from "@/types/database";
 import { DURUMLAR, KANALLAR, KAYIP_NEDENLERI, MEMNUNIYET, PUANLI_ALANLAR } from "@/lib/franchise";
+import { koordinatCoz } from "@/lib/konum";
 
 type Sonuc = { hata?: string; ok?: string };
 
@@ -44,6 +45,12 @@ function alanlariOku(formData: FormData) {
     sorumlu_arama_tarihi: tarih("sorumlu_arama_tarihi"),
     kaybetme_nedeni: izinli(KAYIP_NEDENLERI, s("kaybetme_nedeni")),
     gorusme_notu: s("gorusme_notu"),
+    adres: s("adres"),
+    // Konum: kullanıcı Google Maps bağlantısını yapıştırır, koordinatı biz
+    // çıkarırız. Kısa link (goo.gl) çözülemez; bağlantı yine saklanır.
+    harita_url: s("harita_url"),
+    enlem: koordinatCoz(s("harita_url"))?.enlem ?? null,
+    boylam: koordinatCoz(s("harita_url"))?.boylam ?? null,
     memnuniyet_arama_tarihi: tarih("memnuniyet_arama_tarihi"),
     memnuniyet_neticesi: izinli(MEMNUNIYET, s("memnuniyet_neticesi")),
     memnuniyet_notu: s("memnuniyet_notu"),
@@ -58,6 +65,7 @@ function izilenSecenek(liste: string[], v: string) {
 
 export async function basvuruEkle(_onceki: Sonuc | null, formData: FormData): Promise<Sonuc> {
   const profile = await yazabilirMi();
+  if (!profile) return { hata: "Görüşme ekleme yetkiniz yok." };
   if (!profile) return { hata: "Başvuru girme yetkiniz yok." };
 
   const a = alanlariOku(formData);
@@ -361,4 +369,61 @@ export async function topluSorumluAta(
 
   revalidatePath("/franchise-basvurulari");
   return { guncellenen: toplam };
+}
+
+// ─── Görüşmeler ───────────────────────────────────────────────────────────
+// Önceden tek bir gorusme_notu alanı vardı ve ikinci görüşme birincinin
+// üstüne yazılıyordu. Artık her görüşme ayrı satır.
+
+const GORUSME_TURLERI = ["telefon", "yuz_yuze", "video", "saha_ziyareti", "diger"];
+
+export async function gorusmeEkle(_onceki: Sonuc | null, formData: FormData): Promise<Sonuc> {
+  const profile = await yazabilirMi();
+  if (!profile) return { hata: "Görüşme ekleme yetkiniz yok." };
+  const al = (a: string) => String(formData.get(a) ?? "").trim();
+
+  const basvuruId = al("basvuru_id");
+  const notlar = al("notlar");
+  if (!basvuruId) return { hata: "Başvuru seçili değil." };
+  if (!notlar) return { hata: "Görüşme notu boş olamaz." };
+
+  const turHam = al("tur");
+  const supabase = await createClient();
+  const { error } = await supabase.from("franchise_gorusmeleri").insert({
+    basvuru_id: basvuruId,
+    tarih: al("tarih") || new Date().toISOString().slice(0, 10),
+    tur: GORUSME_TURLERI.includes(turHam) ? turHam : "telefon",
+    gorusen: al("gorusen"),
+    notlar,
+    sonraki_adim: al("sonraki_adim"),
+    sonraki_tarih: al("sonraki_tarih") || null,
+    olusturan_id: profile.id,
+  });
+
+  if (error) {
+    if (/relation .* does not exist/i.test(error.message) || /schema cache/i.test(error.message)) {
+      return { hata: "Görüşme tablosu yok — 0020_franchise_adres_gorusme.sql çalıştırılmalı." };
+    }
+    return { hata: "Kaydedilemedi: " + error.message };
+  }
+
+  revalidatePath("/franchise-basvurulari");
+  return { ok: "Görüşme kaydedildi" };
+}
+
+export async function gorusmeSil(_onceki: Sonuc | null, formData: FormData): Promise<Sonuc> {
+  const profile = await requireProfile();
+  if (profile.rol !== "admin" && profile.rol !== "genel_mudur") {
+    return { hata: "Görüşme silme yetkisi admin/genel müdürdedir — kayıt tutanak niteliğinde." };
+  }
+
+  const id = String(formData.get("gorusme_id") ?? "").trim();
+  if (!id) return { hata: "Görüşme seçili değil." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("franchise_gorusmeleri").delete().eq("id", id);
+  if (error) return { hata: "Silinemedi: " + error.message };
+
+  revalidatePath("/franchise-basvurulari");
+  return { ok: "Görüşme silindi" };
 }
