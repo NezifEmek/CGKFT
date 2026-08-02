@@ -3,6 +3,7 @@ import { requireProfile } from "@/lib/auth";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Profile } from "@/types/database";
 import type { Sikayet } from "@/lib/sikayet";
+import type { Dosya } from "@/lib/dosya";
 import { SikayetArayuz, type Hareket } from "./sikayet-arayuz";
 
 interface SubeKisa {
@@ -18,7 +19,7 @@ export default async function SikayetlerSayfasi() {
 
   let tabloYok = false;
 
-  const [sikayetler, hareketler, atamalar, subeler, { data: profiller }] = await Promise.all([
+  const [sikayetler, hareketler, atamalar, dosyalar, subeler, { data: profiller }] = await Promise.all([
     tumSatirlariGetir<Sikayet>((f, t) =>
       supabase
         .from("sikayetler")
@@ -40,6 +41,15 @@ export default async function SikayetlerSayfasi() {
         .range(f, t)
         .returns<{ sikayet_id: string; profil_id: string }[]>(),
     ).catch(() => [] as { sikayet_id: string; profil_id: string }[]),
+    tumSatirlariGetir<Dosya>((f, t) =>
+      supabase
+        .from("dosyalar")
+        .select("*")
+        .eq("kapsam", "sikayet")
+        .order("created_at", { ascending: false })
+        .range(f, t)
+        .returns<Dosya[]>(),
+    ).catch(() => [] as Dosya[]),
     tumSatirlariGetir<SubeKisa>((f, t) =>
       supabase.from("subeler").select("id, ad, aktif").range(f, t).returns<SubeKisa[]>(),
     ),
@@ -63,6 +73,7 @@ export default async function SikayetlerSayfasi() {
         sikayetler={sikayetler}
         hareketler={hareketler}
         atamalar={atamalar}
+        dosyalar={dosyalar}
         subeler={subeler
           .filter((s) => s.aktif !== false)
           .map((s) => ({ id: s.id, ad: s.ad }))

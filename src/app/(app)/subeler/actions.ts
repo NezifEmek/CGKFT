@@ -292,6 +292,96 @@ export async function sorumluGecmisSil(
   return { ok: "Kayıt silindi" };
 }
 
+// ─── Sözleşmeler ──────────────────────────────────────────────────────────
+
+const SOZLESME_TURLERI = ["franchise", "kira", "marka", "diger"] as const;
+
+export async function sozlesmeKaydet(
+  _o: { hata?: string; ok?: string } | null,
+  formData: FormData,
+): Promise<{ hata?: string; ok?: string }> {
+  const profile = await requireProfile();
+  if (profile.rol === "denetmen") return { hata: "Bu işlem için yetkiniz yok." };
+
+  const al = (a: string) => String(formData.get(a) ?? "").trim();
+  const subeId = al("sube_id");
+  if (!subeId) return { hata: "Şube seçili değil." };
+
+  const baslangic = al("baslangic") || null;
+  const bitis = al("bitis") || null;
+  if (baslangic && bitis && bitis < baslangic) {
+    return { hata: "Bitiş tarihi başlangıçtan önce olamaz." };
+  }
+
+  const uyariHam = Number(al("uyari_gun"));
+  const uyariGun = Number.isFinite(uyariHam) && uyariHam >= 0 ? Math.round(uyariHam) : 90;
+
+  const turHam = al("tur");
+  const alanlar = {
+    sube_id: subeId,
+    tur: (SOZLESME_TURLERI as readonly string[]).includes(turHam) ? turHam : "franchise",
+    sozlesme_no: al("sozlesme_no"),
+    baslangic,
+    bitis,
+    uyari_gun: uyariGun,
+    taraf: al("taraf"),
+    notlar: al("notlar"),
+    updated_at: new Date().toISOString(),
+  };
+
+  const supabase = await createClient();
+  const id = al("sozlesme_id");
+  const { error } = id
+    ? await supabase.from("sozlesmeler").update(alanlar).eq("id", id)
+    : await supabase.from("sozlesmeler").insert({ ...alanlar, olusturan_id: profile.id });
+
+  if (error) {
+    if (/relation .* does not exist/i.test(error.message) || /schema cache/i.test(error.message)) {
+      return { hata: "Sözleşme tablosu yok — 0015_dosyalar.sql çalıştırılmalı." };
+    }
+    if (/sozlesme_tarih_sirasi/.test(error.message)) {
+      return { hata: "Bitiş tarihi başlangıçtan önce olamaz." };
+    }
+    return { hata: (id ? "Güncellenemedi: " : "Eklenemedi: ") + error.message };
+  }
+
+  revalidatePath(`/subeler/${subeId}`);
+  return { ok: id ? "Sözleşme güncellendi" : "Sözleşme eklendi" };
+}
+
+export async function sozlesmeSil(
+  _o: { hata?: string; ok?: string } | null,
+  formData: FormData,
+): Promise<{ hata?: string; ok?: string }> {
+  const profile = await requireProfile();
+  if (profile.rol === "denetmen") return { hata: "Bu işlem için yetkiniz yok." };
+
+  const id = String(formData.get("sozlesme_id") ?? "").trim();
+  const subeId = String(formData.get("sube_id") ?? "").trim();
+  if (!id) return { hata: "Sözleşme seçili değil." };
+
+  const supabase = await createClient();
+  // Sözleşmeye bağlı dosyalar da gitmeli; Storage nesnelerini de temizle.
+  const { data: ekler } = await supabase
+    .from("dosyalar")
+    .select("id, yol")
+    .eq("kapsam", "sozlesme")
+    .eq("kayit_id", id)
+    .returns<{ id: string; yol: string }[]>();
+
+  const { error } = await supabase.from("sozlesmeler").delete().eq("id", id);
+  if (error) return { hata: "Silinemedi: " + error.message };
+
+  if (ekler?.length) {
+    await supabase.from("dosyalar").delete().in("id", ekler.map((e) => e.id));
+    const admin = createAdminClient();
+    await admin.storage.from("belgeler").remove(ekler.map((e) => e.yol));
+  }
+
+  revalidatePath(`/subeler/${subeId}`);
+  return { ok: "Sözleşme silindi" };
+}
+
 export async function kgKaydet(subeId: string, yil: number, ay: string, kg: number) {
   const supabase = await createClient();
   const { error } = await supabase

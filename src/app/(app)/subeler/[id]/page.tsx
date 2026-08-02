@@ -7,6 +7,8 @@ import { SubeGecmisPaneli, type GecmisKayit } from "@/components/sube-gecmis-pan
 import { KgGrid } from "../kg-grid";
 import { DenetimForm } from "../denetim-form";
 import { IletisimKarti, SorumluGecmisi } from "./sube-ana-veri";
+import { SozlesmePaneli } from "./sozlesme-paneli";
+import type { Sozlesme, Dosya } from "@/lib/dosya";
 
 export default async function SubeDetaySayfasi({
   params,
@@ -31,6 +33,8 @@ export default async function SubeDetaySayfasi({
     { data: denetimler },
     { data: skorlar },
     { data: sorumlular, error: sorumluHata },
+    { data: sozlesmeler, error: sozlesmeHata },
+    { data: sozlesmeDosyalari },
   ] = await Promise.all([
       supabase.from("aylar").select("*").order("yil").returns<Ay[]>(),
       supabase.from("aylik_satislar").select("yil, ay, kg").eq("sube_id", id),
@@ -53,6 +57,10 @@ export default async function SubeDetaySayfasi({
         .select("*")
         .eq("sube_id", id)
         .returns<SubeSorumluGecmisi[]>(),
+      supabase.from("sozlesmeler").select("*").eq("sube_id", id).returns<Sozlesme[]>(),
+      // Sözleşme ekleri: kapsamı 'sozlesme' olan dosyalar bu şubenin
+      // sözleşme kimliklerine göre süzülüyor (aşağıda).
+      supabase.from("dosyalar").select("*").eq("kapsam", "sozlesme").returns<Dosya[]>(),
     ]);
 
   // 0010 henüz çalıştırılmadıysa ekranın tamamı kaybolmasın; uyarıyı
@@ -149,6 +157,17 @@ export default async function SubeDetaySayfasi({
           duzenlenebilir={kgDuzenlenebilir}
           silebilir={profile.rol === "admin" || profile.rol === "genel_mudur"}
           tabloYok={sorumluTabloYok}
+        />
+
+        <SozlesmePaneli
+          subeId={sube.id}
+          sozlesmeler={sozlesmeler ?? []}
+          dosyalar={(sozlesmeDosyalari ?? []).filter((d) =>
+            (sozlesmeler ?? []).some((s) => s.id === d.kayit_id),
+          )}
+          bugun={new Date().toISOString().slice(0, 10)}
+          duzenlenebilir={kgDuzenlenebilir}
+          tabloYok={Boolean(sozlesmeHata)}
         />
       </div>
     </div>

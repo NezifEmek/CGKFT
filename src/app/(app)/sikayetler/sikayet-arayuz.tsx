@@ -11,6 +11,8 @@ import {
   HAREKET_ETIKET, HAREKET_SIMGE, sikayetOzeti, tekrarlayanlar, sikayetCsv,
   gecikmisMi, cozumSuresi, acikMi, type Sikayet,
 } from "@/lib/sikayet";
+import type { Dosya } from "@/lib/dosya";
+import { DosyaEkleri } from "@/components/dosya-ekleri";
 
 const gir =
   "rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2.5 py-1.5 text-sm";
@@ -41,11 +43,12 @@ function tarihYaz(t: string | null | undefined): string {
 }
 
 export function SikayetArayuz({
-  sikayetler, hareketler, atamalar, subeler, kisiler, benId, yonetimMi, bugun, tabloYok,
+  sikayetler, hareketler, atamalar, dosyalar, subeler, kisiler, benId, yonetimMi, bugun, tabloYok,
 }: {
   sikayetler: Sikayet[];
   hareketler: Hareket[];
   atamalar: { sikayet_id: string; profil_id: string }[];
+  dosyalar: Dosya[];
   subeler: { id: string; ad: string }[];
   kisiler: { id: string; ad_soyad: string }[];
   benId: string;
@@ -296,7 +299,7 @@ export function SikayetArayuz({
             </button>
           </div>
           <p className="text-[11px] text-neutral-400">
-            Dosya ve görsel ekleme henüz açık değil — Supabase Storage kurulunca eklenecek.
+            Dosya ve görselleri kaydettikten sonra, kaydın kartından ekleyebilirsiniz.
           </p>
         </form>
       )}
@@ -415,6 +418,7 @@ export function SikayetArayuz({
         <SikayetKarti
           s={secili}
           hareketler={hareketler.filter((h) => h.sikayet_id === secili.id)}
+          ekler={dosyalar.filter((d) => d.kayit_id === secili.id)}
           atananlar={atamaHaritasi.get(secili.id) ?? []}
           kisiler={kisiler}
           kisiAdlari={kisiAdlari}
@@ -591,11 +595,12 @@ function Trend({ veri }: { veri: { ay: string; acilan: number; kapanan: number }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function SikayetKarti({
-  s, hareketler, atananlar, kisiler, kisiAdlari, subeAdlari, bugun, yonetimMi,
+  s, hareketler, ekler, atananlar, kisiler, kisiAdlari, subeAdlari, bugun, yonetimMi,
   kapat, duzenle, eylemler,
 }: {
   s: Sikayet;
   hareketler: Hareket[];
+  ekler: Dosya[];
   atananlar: string[];
   kisiler: { id: string; ad_soyad: string }[];
   kisiAdlari: Map<string, string>;
@@ -668,6 +673,8 @@ function SikayetKarti({
               🏪 Şube kartına git →
             </Link>
           )}
+
+          <DosyaEkleri kapsam="sikayet" kayitId={s.id} dosyalar={ekler} baslik="Dosya ve görseller" />
 
           {s.cozum_notu && (
             <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2">
