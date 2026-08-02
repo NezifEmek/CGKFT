@@ -237,7 +237,9 @@ export async function gorevAta(_o: Sonuc | null, formData: FormData): Promise<So
 
 /** Atanan kişi kendi görevini tamamlar. Termin BURADAN değişmez. */
 export async function gorevDurumGuncelle(_o: Sonuc | null, formData: FormData): Promise<Sonuc> {
-  const profile = await requireProfile();
+  // Kimliği burada kullanmıyoruz ama çağrı yine de yapılmalı: oturumu
+  // doğrular ve giriş yapmamış isteği reddeder.
+  await requireProfile();
   const id = metin(formData, "gorev_id");
   const durum = metin(formData, "durum");
   if (!id) return { hata: "Görev seçili değil." };

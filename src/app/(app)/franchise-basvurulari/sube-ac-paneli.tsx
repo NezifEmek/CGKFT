@@ -41,28 +41,37 @@ export function SubeAcPaneli({
   const [acik, setAcik] = useState(false);
   const [il, setIl] = useState(basvuru.il ?? "");
   const [ilce, setIlce] = useState(basvuru.ilce ?? "");
-  const [kod, setKod] = useState<string | null>(null);
-  const [kodHata, setKodHata] = useState<string | null>(null);
+  // Sonuç, hangi il/ilçe için hesaplandığıyla birlikte saklanıyor.
+  //
+  // Önceden il/ilçe boşaldığında effect içinde setState çağrılıp önizleme
+  // temizleniyordu; bu, etkinin içinden eşzamanlı durum değişimi olduğu için
+  // zincirleme render tetikliyordu. Artık gösterilecek değer state'ten
+  // TÜRETİLİYOR: anahtar tutmuyorsa önizleme zaten görünmüyor. Yan fayda,
+  // il değişince eski ilin kodunun bir an ekranda kalmaması.
+  const [kodSonuc, setKodSonuc] = useState<
+    { anahtar: string; kod: string | null; hata: string | null } | null
+  >(null);
 
   const [d1, a1, p1] = useActionState(basvurudanSubeAc, null);
   const [d2, a2, p2] = useActionState(subeBagiKaldir, null);
   const durum = d1 ?? d2;
 
+  const anahtar = `${il.trim()}|${ilce.trim()}`;
+  const onizlenebilir = acik && il.trim() !== "" && ilce.trim() !== "";
+
   // Kod önizlemesi: sıra no'yu yalnızca sunucu güvenilir hesaplayabiliyor.
   useEffect(() => {
-    if (!acik || !il.trim() || !ilce.trim()) {
-      setKod(null);
-      setKodHata(null);
-      return;
-    }
+    if (!onizlenebilir) return;
     let iptal = false;
     acilisKoduOnizle(il, ilce).then((r) => {
-      if (iptal) return;
-      setKod(r.kod);
-      setKodHata(r.hata);
+      if (!iptal) setKodSonuc({ anahtar, kod: r.kod, hata: r.hata });
     });
     return () => { iptal = true; };
-  }, [acik, il, ilce]);
+  }, [onizlenebilir, il, ilce, anahtar]);
+
+  const guncelSonuc = onizlenebilir && kodSonuc?.anahtar === anahtar ? kodSonuc : null;
+  const kod = guncelSonuc?.kod ?? null;
+  const kodHata = guncelSonuc?.hata ?? null;
 
   // ── Zaten açılmış ────────────────────────────────────────────────
   if (basvuru.sube_id) {

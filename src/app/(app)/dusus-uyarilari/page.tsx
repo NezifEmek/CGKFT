@@ -3,7 +3,7 @@ import { requireProfile } from "@/lib/auth";
 import { DonemSecici, donemCoz, subeleriSuz, kapananlarGoruntulensin } from "@/components/donem-secici";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
-import { aySirala, gunSayisiMap, dususUyarilariHesapla, yuzdeFmt } from "@/lib/analytics";
+import { gunSayisiMap, dususUyarilariHesapla, yuzdeFmt } from "@/lib/analytics";
 
 const CARI_YIL = 2026;
 

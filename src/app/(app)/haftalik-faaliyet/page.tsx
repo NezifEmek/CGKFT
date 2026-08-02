@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
+import { tumSatirlariGetir, sonuclaGetir } from "@/lib/supabase/fetch-all";
 import { haftaKur, haftaBasi, haftaSecenekleri, gunEkle } from "@/lib/hafta";
 import {
   haftalikFaaliyet,
@@ -44,7 +44,6 @@ export default async function HaftalikFaaliyetSayfasi({
   const araligBas = gunEkle(hafta.baslangic, -1);
   const araligBit = gunEkle(hafta.bitis, 1);
 
-  let planTabloYok = false;
 
   const [
     { data: profiller },
@@ -55,7 +54,7 @@ export default async function HaftalikFaaliyetSayfasi({
     toplantilar,
     gorevler,
     oneriler,
-    plan,
+    planSonuc,
     { data: dokData },
   ] = await Promise.all([
     supabase.from("profiles").select("id, ad_soyad, rol, pozisyon_id").returns<Profile[]>(),
@@ -108,17 +107,16 @@ export default async function HaftalikFaaliyetSayfasi({
         .range(f, t)
         .returns<OneriSatir[]>(),
     ).catch(() => [] as OneriSatir[]),
-    tumSatirlariGetir<PlanSatir>((f, t) =>
-      supabase
-        .from("haftalik_plan")
-        .select("*")
-        .eq("hafta", hafta.baslangic)
-        .range(f, t)
-        .returns<PlanSatir[]>(),
-    ).catch(() => {
-      planTabloYok = true;
-      return [] as PlanSatir[];
-    }),
+    sonuclaGetir<PlanSatir>(() =>
+      tumSatirlariGetir<PlanSatir>((f, t) =>
+        supabase
+          .from("haftalik_plan")
+          .select("*")
+          .eq("hafta", hafta.baslangic)
+          .range(f, t)
+          .returns<PlanSatir[]>(),
+      ),
+    ),
     supabase.from("dokuman_ayarlari").select("pozisyonlar").eq("id", 1).maybeSingle<{ pozisyonlar: unknown }>(),
   ]);
 
@@ -150,7 +148,7 @@ export default async function HaftalikFaaliyetSayfasi({
     toplantilar,
     gorevler,
     oneriler,
-    plan,
+    plan: planSonuc.veri,
     subeAdlari: new Map(subeler.map((s) => [s.id, s.ad])),
   };
 
@@ -181,7 +179,7 @@ export default async function HaftalikFaaliyetSayfasi({
         benId={profile.id}
         duzenleyebilir={duzenleyebilir}
         gecenHafta={gecenHafta}
-        tabloYok={planTabloYok}
+        tabloYok={Boolean(planSonuc.hata)}
       />
     </div>
   );

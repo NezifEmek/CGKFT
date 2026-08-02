@@ -4,7 +4,6 @@ import { DonemSecici, donemCoz, subeleriSuz, kapananlarGoruntulensin } from "@/c
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay, FiyatModeli } from "@/types/database";
 import {
-  aySirala,
   gunSayisiMap,
   subeKgOzetleri,
   segmentBul,

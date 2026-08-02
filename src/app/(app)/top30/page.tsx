@@ -4,7 +4,6 @@ import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import { DonemSecici, donemCoz, subeleriSuz, kapananlarGoruntulensin } from "@/components/donem-secici";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import {
-  aySirala,
   gunSayisiMap,
   subeKgOzetleri,
   segmentBul,

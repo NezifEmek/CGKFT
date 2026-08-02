@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
+import { tumSatirlariGetir, sonuclaGetir } from "@/lib/supabase/fetch-all";
 import type { Profile } from "@/types/database";
 import { OneriArayuz, type Oneri } from "./oneri-arayuz";
 
@@ -20,14 +20,12 @@ export default async function OnerilerSayfasi() {
   const profile = await requireProfile();
   const supabase = await createClient();
 
-  let tabloYok = false;
-  const [oneriler, destekler, { data: profiller }] = await Promise.all([
-    tumSatirlariGetir<OneriSatir>((f, t) =>
-      supabase.from("oneriler").select("*").order("created_at", { ascending: false }).range(f, t),
-    ).catch(() => {
-      tabloYok = true;
-      return [] as OneriSatir[];
-    }),
+  const [oneriSonuc, destekler, { data: profiller }] = await Promise.all([
+    sonuclaGetir<OneriSatir>(() =>
+      tumSatirlariGetir<OneriSatir>((f, t) =>
+        supabase.from("oneriler").select("*").order("created_at", { ascending: false }).range(f, t),
+      ),
+    ),
     tumSatirlariGetir<{ oneri_id: string; profil_id: string }>((f, t) =>
       supabase.from("oneri_destekleri").select("*").range(f, t),
     ).catch(() => [] as { oneri_id: string; profil_id: string }[]),
@@ -41,6 +39,7 @@ export default async function OnerilerSayfasi() {
     if (d.profil_id === profile.id) benimDestek.add(d.oneri_id);
   }
 
+  const oneriler = oneriSonuc.veri;
   const liste: Oneri[] = oneriler.map((o) => ({
     ...o,
     destekSayisi: destekSay.get(o.id) ?? 0,
@@ -62,7 +61,7 @@ export default async function OnerilerSayfasi() {
         </p>
       </div>
 
-      {tabloYok ? (
+      {oneriSonuc.hata ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300">
           <b>Veritabanı tablosu henüz oluşturulmamış.</b> Bu ekranın çalışması için{" "}
           <code className="text-xs">supabase/migrations/0009_oneriler.sql</code> dosyasındaki

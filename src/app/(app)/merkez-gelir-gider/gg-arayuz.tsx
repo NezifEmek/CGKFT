@@ -87,17 +87,26 @@ export function GGArayuz({
     return s >= a && s <= b;
   };
 
-  const aktifSubeler = seciliSubeler.length ? seciliSubeler : subeler.map((s) => s.id);
+  // Şube kimlikleri Set olarak: includes() her satırda diziyi baştan tarıyordu.
+  // Ayrıca bağımlılık listesinde `dizi.join(",")` gibi hesaplanmış bir ifade
+  // yerine doğrudan bir değer bulunması gerekiyor.
+  const aktifSubeKume = useMemo(
+    () => new Set(seciliSubeler.length ? seciliSubeler : subeler.map((s) => s.id)),
+    [seciliSubeler, subeler],
+  );
 
   const filtreliGunler = useMemo(
-    () => gunler.filter((g) => aktifSubeler.includes(g.sube_id) && araliktaMi(yilAl(g.tarih), ayAdi(g.tarih))),
+    () =>
+      gunler.filter(
+        (g) => aktifSubeKume.has(g.sube_id) && araliktaMi(yilAl(g.tarih), ayAdi(g.tarih)),
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [gunler, aktifSubeler.join(","), donemBas, donemBit],
+    [gunler, aktifSubeKume, donemBas, donemBit],
   );
   const filtreliKalemler = useMemo(
-    () => kalemler.filter((k) => aktifSubeler.includes(k.sube_id) && araliktaMi(k.yil, k.ay)),
+    () => kalemler.filter((k) => aktifSubeKume.has(k.sube_id) && araliktaMi(k.yil, k.ay)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [kalemler, aktifSubeler.join(","), donemBas, donemBit],
+    [kalemler, aktifSubeKume, donemBas, donemBit],
   );
 
   const genel = ggOzetle(filtreliGunler, filtreliKalemler);

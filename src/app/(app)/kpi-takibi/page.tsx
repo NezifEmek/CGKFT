@@ -3,7 +3,7 @@ import { requireProfile } from "@/lib/auth";
 import { DonemSecici, donemCoz, subeleriSuz, kapananlarGoruntulensin } from "@/components/donem-secici";
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
-import { aySirala, gunSayisiMap, type Esik } from "@/lib/analytics";
+import { gunSayisiMap, type Esik } from "@/lib/analytics";
 import { kpiKartlariHesapla, type KpiHucre, type KpiKarti } from "@/lib/kpi";
 import { pozisyonlariNormalize } from "@/lib/dokuman";
 import { gorunurPozisyonlar } from "@/lib/organizasyon";

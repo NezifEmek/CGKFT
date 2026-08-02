@@ -107,7 +107,7 @@ export async function primAyarlariKaydet(
   return { ok: "Prim ayarları kaydedildi" };
 }
 
-export async function primAyarlariSifirla(_onceki: Sonuc | null): Promise<Sonuc> {
+export async function primAyarlariSifirla(_: Sonuc | null): Promise<Sonuc> {
   const profile = await yazmaYetkisi();
   if (!profile) return { hata: "Prim ayarlarını değiştirme yetkiniz yok." };
 

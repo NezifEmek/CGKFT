@@ -42,7 +42,7 @@ async function yaz(pozisyonlar: Pozisyon[], profilId: string): Promise<string | 
   return error ? error.message : null;
 }
 
-export async function pozisyonKaydet(_onceki: Sonuc | null, formData: FormData): Promise<Sonuc> {
+export async function pozisyonKaydet(_: Sonuc | null, formData: FormData): Promise<Sonuc> {
   const profile = await yazmaYetkisi();
   if (!profile) return { hata: "Görev tanımlarını değiştirme yetkiniz yok." };
 
@@ -70,7 +70,7 @@ export async function pozisyonKaydet(_onceki: Sonuc | null, formData: FormData):
   return { ok: `“${unvan}” kaydedildi` };
 }
 
-export async function pozisyonSifirla(_onceki: Sonuc | null, formData: FormData): Promise<Sonuc> {
+export async function pozisyonSifirla(_: Sonuc | null, formData: FormData): Promise<Sonuc> {
   const profile = await yazmaYetkisi();
   if (!profile) return { hata: "Görev tanımlarını değiştirme yetkiniz yok." };
 
@@ -92,7 +92,7 @@ export async function pozisyonSifirla(_onceki: Sonuc | null, formData: FormData)
   return { ok: `“${varsayilan.unvan}” orijinal içeriğine döndürüldü` };
 }
 
-export async function pozisyonSil(_onceki: Sonuc | null, formData: FormData): Promise<Sonuc> {
+export async function pozisyonSil(_: Sonuc | null, formData: FormData): Promise<Sonuc> {
   const profile = await yazmaYetkisi();
   if (!profile) return { hata: "Görev tanımlarını değiştirme yetkiniz yok." };
 
@@ -113,7 +113,7 @@ export async function pozisyonSil(_onceki: Sonuc | null, formData: FormData): Pr
   return { ok: `“${silinen.unvan}” silindi` };
 }
 
-export async function pozisyonEkle(_onceki: Sonuc | null): Promise<Sonuc> {
+export async function pozisyonEkle(_: Sonuc | null): Promise<Sonuc> {
   const profile = await yazmaYetkisi();
   if (!profile) return { hata: "Görev tanımlarını değiştirme yetkiniz yok." };
 

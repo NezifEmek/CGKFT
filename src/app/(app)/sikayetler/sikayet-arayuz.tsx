@@ -9,7 +9,7 @@ import {
   KANALLAR, BASVURAN_TURLERI, KATEGORILER, DURUMLAR, ONCELIKLER, DEPARTMANLAR,
   HAREKET_TURLERI, DURUM_ETIKET, DURUM_RENK, ONCELIK_ETIKET, ONCELIK_RENK,
   HAREKET_ETIKET, HAREKET_SIMGE, sikayetOzeti, tekrarlayanlar, sikayetCsv,
-  gecikmisMi, cozumSuresi, acikMi, type Sikayet,
+  gecikmisMi, cozumSuresi, type Sikayet,
 } from "@/lib/sikayet";
 import type { Dosya } from "@/lib/dosya";
 import { DosyaEkleri } from "@/components/dosya-ekleri";

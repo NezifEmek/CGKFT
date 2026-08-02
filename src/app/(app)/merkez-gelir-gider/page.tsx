@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import type { Sube } from "@/types/database";
-import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
+import { tumSatirlariGetir, sonuclaGetir } from "@/lib/supabase/fetch-all";
 import type { GunlukKayit, Kalem } from "@/lib/merkez-gg";
 import { GGArayuz, type GGSube } from "./gg-arayuz";
 
@@ -11,26 +11,27 @@ export default async function MerkezGelirGiderSayfasi() {
 
   // Sayfalama şart: günlük defter 25 merkez şube × 365 gün ile tek yılda bile
   // 1000 satırı aşar; PostgREST tek istekte en fazla 1000 satır döndürür.
-  let tabloYok = false;
-  const [{ data: subeler }, gunHam, kalemHam] = await Promise.all([
+  const [{ data: subeler }, gunSonuc, kalemSonuc] = await Promise.all([
     supabase.from("subeler").select("*").eq("tip", "MS").order("ad").returns<Sube[]>(),
-    tumSatirlariGetir<GunlukKayit>((from, to) =>
-      supabase
-        .from("merkez_gg_gunluk")
-        .select("*")
-        .order("tarih", { ascending: false })
-        .range(from, to),
-    ).catch(() => {
-      tabloYok = true;
-      return [] as GunlukKayit[];
-    }),
-    tumSatirlariGetir<Kalem>((from, to) =>
-      supabase.from("merkez_gg_kalem").select("*").range(from, to),
-    ).catch(() => {
-      tabloYok = true;
-      return [] as Kalem[];
-    }),
+    sonuclaGetir<GunlukKayit>(() =>
+      tumSatirlariGetir<GunlukKayit>((from, to) =>
+        supabase
+          .from("merkez_gg_gunluk")
+          .select("*")
+          .order("tarih", { ascending: false })
+          .range(from, to),
+      ),
+    ),
+    sonuclaGetir<Kalem>(() =>
+      tumSatirlariGetir<Kalem>((from, to) =>
+        supabase.from("merkez_gg_kalem").select("*").range(from, to),
+      ),
+    ),
   ]);
+
+  const gunHam = gunSonuc.veri;
+  const kalemHam = kalemSonuc.veri;
+  const tabloYok = Boolean(gunSonuc.hata || kalemSonuc.hata);
 
   const ggSubeler: GGSube[] = (subeler ?? []).map((s) => ({
     id: s.id,

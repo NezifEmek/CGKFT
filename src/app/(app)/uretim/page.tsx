@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
+import { tumSatirlariGetir, sonuclaGetir } from "@/lib/supabase/fetch-all";
 import type { Urun, UretimKaydi } from "@/lib/uretim";
 import { UretimArayuz, type Tanim } from "./uretim-arayuz";
 
@@ -9,20 +9,17 @@ export default async function UretimSayfasi() {
   const supabase = await createClient();
   const bugun = new Date().toISOString().slice(0, 10);
 
-  let tabloYok = false;
-
-  const [kayitlar, urunler, tanimlar] = await Promise.all([
-    tumSatirlariGetir<UretimKaydi>((f, t) =>
-      supabase
-        .from("uretim_kayitlari")
-        .select("*")
-        .order("tarih", { ascending: false })
-        .range(f, t)
-        .returns<UretimKaydi[]>(),
-    ).catch(() => {
-      tabloYok = true;
-      return [] as UretimKaydi[];
-    }),
+  const [kayitSonuc, urunler, tanimlar] = await Promise.all([
+    sonuclaGetir<UretimKaydi>(() =>
+      tumSatirlariGetir<UretimKaydi>((f, t) =>
+        supabase
+          .from("uretim_kayitlari")
+          .select("*")
+          .order("tarih", { ascending: false })
+          .range(f, t)
+          .returns<UretimKaydi[]>(),
+      ),
+    ),
     tumSatirlariGetir<Urun>((f, t) =>
       supabase
         .from("uretim_urunleri")
@@ -58,7 +55,7 @@ export default async function UretimSayfasi() {
       </div>
 
       <UretimArayuz
-        kayitlar={kayitlar}
+        kayitlar={kayitSonuc.veri}
         // Pasif ürünler listede kalır (geçmiş kayıtlar okunabilsin diye),
         // ekran onları "(pasif)" diye işaretler.
         urunler={urunler}
@@ -66,7 +63,7 @@ export default async function UretimSayfasi() {
         bugun={bugun}
         yazabilir={yazabilir}
         yonetimMi={yonetimMi}
-        tabloYok={tabloYok}
+        tabloYok={Boolean(kayitSonuc.hata)}
       />
     </div>
   );

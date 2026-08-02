@@ -33,6 +33,15 @@ export default async function KullanicilarSayfasi() {
     erisimMap.get(e.profil_id)!.push(e.sube_id);
   }
 
+  // "Engelli mi?" sorusu ancak bir ANA göre cevaplanabilir; Supabase yalnızca
+  // banned_until tarihini veriyor, hazır bir bayrak yok. Bu bir sunucu
+  // bileşeni: her istekte bir kez çalışıyor ve buradaki "şimdi" tam olarak
+  // isteğin anı — istemci render saflığı kuralının hedeflediği durum değil.
+  // Değer satır başına değil, bir kez okunuyor ki tüm satırlar aynı ana göre
+  // değerlendirilsin.
+  // eslint-disable-next-line react-hooks/purity
+  const simdi = Date.now();
+
   const authBilgi = new Map(
     (authSonuc.data?.users ?? []).map((u) => [
       u.id,
@@ -42,7 +51,7 @@ export default async function KullanicilarSayfasi() {
         // banned_until geçmişte değilse kullanıcı engelli sayılır.
         engelliMi: Boolean(
           (u as { banned_until?: string }).banned_until &&
-            new Date((u as { banned_until?: string }).banned_until!).getTime() > Date.now(),
+            new Date((u as { banned_until?: string }).banned_until!).getTime() > simdi,
         ),
       },
     ]),

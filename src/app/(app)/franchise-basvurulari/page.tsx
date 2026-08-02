@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
+import { tumSatirlariGetir, sonuclaGetir } from "@/lib/supabase/fetch-all";
 import type { FranchiseBasvuru } from "@/lib/franchise";
 import { BasvuruArayuz } from "./basvuru-arayuz";
 
@@ -9,17 +9,17 @@ export default async function FranchiseBasvurulariSayfasi() {
   const supabase = await createClient();
 
   // 743 kayıt bugün 1000'in altında ama büyümesi bekleniyor — sayfalama şart.
-  let tabloYok = false;
-  const basvurular = await tumSatirlariGetir<FranchiseBasvuru>((from, to) =>
-    supabase
-      .from("franchise_basvurulari")
-      .select("*")
-      .order("tarih", { ascending: false })
-      .range(from, to),
-  ).catch(() => {
-    tabloYok = true;
-    return [] as FranchiseBasvuru[];
-  });
+  const basvuruSonuc = await sonuclaGetir<FranchiseBasvuru>(() =>
+    tumSatirlariGetir<FranchiseBasvuru>((from, to) =>
+      supabase
+        .from("franchise_basvurulari")
+        .select("*")
+        .order("tarih", { ascending: false })
+        .range(from, to),
+    ),
+  );
+  const basvurular = basvuruSonuc.veri;
+  const tabloYok = Boolean(basvuruSonuc.hata);
 
   const sorumlular = [
     ...new Set(basvurular.map((b) => b.sirket_sorumlusu).filter(Boolean)),

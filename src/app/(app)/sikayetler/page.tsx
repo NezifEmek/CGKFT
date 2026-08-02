@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
+import { tumSatirlariGetir, sonuclaGetir } from "@/lib/supabase/fetch-all";
 import type { Profile } from "@/types/database";
 import type { Sikayet } from "@/lib/sikayet";
 import type { Dosya } from "@/lib/dosya";
@@ -17,20 +17,17 @@ export default async function SikayetlerSayfasi() {
   const supabase = await createClient();
   const bugun = new Date().toISOString().slice(0, 10);
 
-  let tabloYok = false;
-
-  const [sikayetler, hareketler, atamalar, dosyalar, subeler, { data: profiller }] = await Promise.all([
-    tumSatirlariGetir<Sikayet>((f, t) =>
-      supabase
-        .from("sikayetler")
-        .select("*")
-        .order("basvuru_tarihi", { ascending: false })
-        .range(f, t)
-        .returns<Sikayet[]>(),
-    ).catch(() => {
-      tabloYok = true;
-      return [] as Sikayet[];
-    }),
+  const [sikayetSonuc, hareketler, atamalar, dosyalar, subeler, { data: profiller }] = await Promise.all([
+    sonuclaGetir<Sikayet>(() =>
+      tumSatirlariGetir<Sikayet>((f, t) =>
+        supabase
+          .from("sikayetler")
+          .select("*")
+          .order("basvuru_tarihi", { ascending: false })
+          .range(f, t)
+          .returns<Sikayet[]>(),
+      ),
+    ),
     tumSatirlariGetir<Hareket>((f, t) =>
       supabase.from("sikayet_hareketleri").select("*").range(f, t).returns<Hareket[]>(),
     ).catch(() => [] as Hareket[]),
@@ -70,7 +67,7 @@ export default async function SikayetlerSayfasi() {
       </div>
 
       <SikayetArayuz
-        sikayetler={sikayetler}
+        sikayetler={sikayetSonuc.veri}
         hareketler={hareketler}
         atamalar={atamalar}
         dosyalar={dosyalar}
@@ -84,7 +81,7 @@ export default async function SikayetlerSayfasi() {
         benId={profile.id}
         yonetimMi={yonetimMi}
         bugun={bugun}
-        tabloYok={tabloYok}
+        tabloYok={Boolean(sikayetSonuc.hata)}
       />
     </div>
   );

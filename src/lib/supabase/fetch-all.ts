@@ -24,3 +24,23 @@ export async function tumSatirlariGetir<T>(
 
   return sonuc;
 }
+
+/**
+ * Sorguyu çalıştırır, hata olursa fırlatmak yerine sonuçla birlikte döner.
+ *
+ * Neden var: bir modülün tablosu henüz oluşturulmamışsa ekranın tamamı
+ * kaybolmasın, yalnızca ilgili kart uyarı göstersin istiyoruz. Bunu daha
+ * önce `let tabloYok = false` deyip catch içinde değiştirerek yapıyorduk;
+ * React'in "render tamamlandıktan sonra değişken yeniden atanamaz" kuralı
+ * bunu haklı olarak hata sayıyor. Artık bayrak mutasyonla değil, dönen
+ * sonuçtan türetiliyor.
+ */
+export async function sonuclaGetir<T>(
+  islem: () => Promise<T[]>,
+): Promise<{ veri: T[]; hata: string | null }> {
+  try {
+    return { veri: await islem(), hata: null };
+  } catch (e) {
+    return { veri: [], hata: e instanceof Error ? e.message : String(e) };
+  }
+}
