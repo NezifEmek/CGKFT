@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { koordinatCoz } from "@/lib/konum";
 
 /** Formdan gelen şube alanlarını okur (ekle ve güncelle ortak). */
 function alanlariOku(formData: FormData, bolgeKilidi: string | null) {
@@ -15,7 +16,25 @@ function alanlariOku(formData: FormData, bolgeKilidi: string | null) {
   const tip = metin("tip") === "MS" ? "MS" : "FR";
   const fiyatGrubuHam = metin("fiyat_grubu");
 
+  // İletişim alanları yalnızca formda VARSA yazılır. Aksi halde bu alanları
+  // içermeyen bir kayıt işlemi (ör. eski bir form, içe aktarma) mevcut
+  // telefon/adres bilgisini boşa çekerdi — sessiz veri kaybı.
+  const iletisim: Record<string, unknown> = {};
+  if (formData.has("harita_url")) {
+    // Kullanıcı Google Maps bağlantısını yapıştırır, koordinatı biz çıkarırız.
+    // Çıkaramazsak (kısa link) bağlantı yine saklanır.
+    const haritaUrl = metin("harita_url");
+    const koordinat = koordinatCoz(haritaUrl);
+    iletisim.harita_url = haritaUrl;
+    iletisim.enlem = koordinat?.enlem ?? null;
+    iletisim.boylam = koordinat?.boylam ?? null;
+  }
+  for (const alan of ["telefon", "yetkili_telefon", "eposta", "adres", "iletisim_notu"]) {
+    if (formData.has(alan)) iletisim[alan] = metin(alan);
+  }
+
   return {
+    ...iletisim,
     ad: metin("ad"),
     tip,
     bolge: bolgeKilidi ?? metin("bolge") ?? "",

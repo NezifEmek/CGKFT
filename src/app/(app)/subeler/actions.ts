@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireProfile } from "@/lib/auth";
 import { subeKoduUret, kodDenetle, KOD_DESENI } from "@/lib/sube-kod";
+import { koordinatCoz } from "@/lib/konum";
 import type { Sube } from "@/types/database";
 
 export async function subeEkle(_onceki: { hata?: string } | null, formData: FormData) {
@@ -87,6 +88,208 @@ export async function kodOnizle(
     .select("id, ad, kod, tip, il, ilce")
     .returns<Sube[]>();
   return subeKoduUret(tip, il.trim(), ilce.trim(), data ?? []);
+}
+
+// ─── İletişim ve konum ────────────────────────────────────────────────────
+
+export async function subeIletisimKaydet(
+  _onceki: { hata?: string; ok?: string } | null,
+  formData: FormData,
+): Promise<{ hata?: string; ok?: string }> {
+  const profile = await requireProfile();
+  if (profile.rol === "denetmen") return { hata: "Bu işlem için yetkiniz yok." };
+
+  const subeId = String(formData.get("sube_id") ?? "").trim();
+  if (!subeId) return { hata: "Şube seçili değil." };
+
+  const al = (ad: string) => String(formData.get(ad) ?? "").trim();
+  const haritaUrl = al("harita_url");
+  const koordinat = koordinatCoz(haritaUrl);
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("subeler")
+    .update({
+      telefon: al("telefon"),
+      yetkili_telefon: al("yetkili_telefon"),
+      eposta: al("eposta"),
+      adres: al("adres"),
+      harita_url: haritaUrl,
+      enlem: koordinat?.enlem ?? null,
+      boylam: koordinat?.boylam ?? null,
+      iletisim_notu: al("iletisim_notu"),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", subeId);
+
+  if (error) {
+    if (/column .* does not exist/i.test(error.message)) {
+      return { hata: "Alanlar henüz oluşturulmamış — 0010_sube_ana_veri.sql çalıştırılmalı." };
+    }
+    return { hata: "Kaydedilemedi: " + error.message };
+  }
+
+  revalidatePath(`/subeler/${subeId}`);
+  revalidatePath("/sube-yonetimi");
+  return {
+    ok: haritaUrl && !koordinat
+      ? "Kaydedildi. (Kısa bağlantı olduğu için koordinat okunamadı; harita düğmesi yine çalışır.)"
+      : "Kaydedildi",
+  };
+}
+
+// ─── Sorumlu değişim geçmişi ──────────────────────────────────────────────
+
+const TARAFLAR = ["merkez", "sube"] as const;
+type Taraf = (typeof TARAFLAR)[number];
+
+function tarafOku(formData: FormData): Taraf | null {
+  const t = String(formData.get("taraf") ?? "").trim();
+  return (TARAFLAR as readonly string[]).includes(t) ? (t as Taraf) : null;
+}
+
+/**
+ * Görevdeki sorumluyu değiştirir. Geçmiş kaydını trigger yazar: eski kişinin
+ * dönemi bugün kapanır, yenisi bugün başlar. Tek yol olması önemli —
+ * geçmiş ile şubedeki güncel değer asla ayrışmasın.
+ */
+export async function sorumluDegistir(
+  _onceki: { hata?: string; ok?: string } | null,
+  formData: FormData,
+): Promise<{ hata?: string; ok?: string }> {
+  const profile = await requireProfile();
+  if (profile.rol === "denetmen") return { hata: "Bu işlem için yetkiniz yok." };
+
+  const subeId = String(formData.get("sube_id") ?? "").trim();
+  const taraf = tarafOku(formData);
+  const yeni = String(formData.get("kisi_adi") ?? "").trim();
+  if (!subeId || !taraf) return { hata: "Eksik bilgi." };
+  if (!yeni) return { hata: "Yeni sorumlunun adı boş olamaz." };
+
+  const supabase = await createClient();
+  const sutun = taraf === "merkez" ? "merkez_yetkilisi" : "sube_yetkilisi";
+  const { error } = await supabase
+    .from("subeler")
+    .update({ [sutun]: yeni, updated_at: new Date().toISOString() })
+    .eq("id", subeId);
+
+  if (error) return { hata: "Değiştirilemedi: " + error.message };
+
+  revalidatePath(`/subeler/${subeId}`);
+  revalidatePath("/sube-yonetimi");
+  revalidatePath("/subeler");
+  return { ok: `Sorumlu ${yeni} olarak değiştirildi; önceki dönem bugün kapatıldı.` };
+}
+
+/** Geçmişe dönük kayıt ekler (bitiş tarihi zorunlu — güncel sorumlu için "Sorumluyu değiştir" kullanılır). */
+export async function sorumluGecmisEkle(
+  _onceki: { hata?: string; ok?: string } | null,
+  formData: FormData,
+): Promise<{ hata?: string; ok?: string }> {
+  const profile = await requireProfile();
+  if (profile.rol === "denetmen") return { hata: "Bu işlem için yetkiniz yok." };
+
+  const subeId = String(formData.get("sube_id") ?? "").trim();
+  const taraf = tarafOku(formData);
+  const kisi = String(formData.get("kisi_adi") ?? "").trim();
+  const baslangic = String(formData.get("baslangic") ?? "").trim() || null;
+  const bitis = String(formData.get("bitis") ?? "").trim() || null;
+
+  if (!subeId || !taraf) return { hata: "Eksik bilgi." };
+  if (!kisi) return { hata: "Kişi adı zorunlu." };
+  if (!bitis) {
+    return {
+      hata: "Geçmiş kayıt için bitiş tarihi zorunlu. Görevdeki kişiyi değiştirmek için “Sorumluyu değiştir”i kullanın.",
+    };
+  }
+  if (baslangic && bitis < baslangic) {
+    return { hata: "Bitiş tarihi başlangıçtan önce olamaz." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("sube_sorumlu_gecmisi").insert({
+    sube_id: subeId,
+    taraf,
+    kisi_adi: kisi,
+    baslangic,
+    bitis,
+    aciklama: String(formData.get("aciklama") ?? "").trim(),
+    otomatik: false,
+    kaydeden_id: profile.id,
+  });
+
+  if (error) {
+    if (/relation .* does not exist/i.test(error.message)) {
+      return { hata: "Tablo yok — 0010_sube_ana_veri.sql çalıştırılmalı." };
+    }
+    return { hata: "Eklenemedi: " + error.message };
+  }
+
+  revalidatePath(`/subeler/${subeId}`);
+  return { ok: "Geçmiş kayıt eklendi" };
+}
+
+/** Var olan bir dönem kaydının tarihlerini/adını düzeltir. */
+export async function sorumluGecmisGuncelle(
+  _onceki: { hata?: string; ok?: string } | null,
+  formData: FormData,
+): Promise<{ hata?: string; ok?: string }> {
+  const profile = await requireProfile();
+  if (profile.rol === "denetmen") return { hata: "Bu işlem için yetkiniz yok." };
+
+  const id = String(formData.get("kayit_id") ?? "").trim();
+  const subeId = String(formData.get("sube_id") ?? "").trim();
+  const kisi = String(formData.get("kisi_adi") ?? "").trim();
+  const baslangic = String(formData.get("baslangic") ?? "").trim() || null;
+  const bitis = String(formData.get("bitis") ?? "").trim() || null;
+  if (!id) return { hata: "Kayıt seçili değil." };
+  if (!kisi) return { hata: "Kişi adı zorunlu." };
+  if (baslangic && bitis && bitis < baslangic) {
+    return { hata: "Bitiş tarihi başlangıçtan önce olamaz." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("sube_sorumlu_gecmisi")
+    .update({
+      kisi_adi: kisi,
+      baslangic,
+      bitis,
+      aciklama: String(formData.get("aciklama") ?? "").trim(),
+      otomatik: false,
+      kaydeden_id: profile.id,
+    })
+    .eq("id", id);
+
+  if (error) {
+    if (/sube_sorumlu_gecmisi_tek_acik/.test(error.message)) {
+      return { hata: "Bu tarafta zaten görevde olan bir kişi var. Önce onun bitiş tarihini girin." };
+    }
+    return { hata: "Güncellenemedi: " + error.message };
+  }
+
+  revalidatePath(`/subeler/${subeId}`);
+  return { ok: "Kayıt güncellendi" };
+}
+
+export async function sorumluGecmisSil(
+  _onceki: { hata?: string; ok?: string } | null,
+  formData: FormData,
+): Promise<{ hata?: string; ok?: string }> {
+  const profile = await requireProfile();
+  if (profile.rol !== "admin" && profile.rol !== "genel_mudur") {
+    return { hata: "Geçmiş kaydı silme yetkisi admin/genel müdürde." };
+  }
+  const id = String(formData.get("kayit_id") ?? "").trim();
+  const subeId = String(formData.get("sube_id") ?? "").trim();
+  if (!id) return { hata: "Kayıt seçili değil." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("sube_sorumlu_gecmisi").delete().eq("id", id);
+  if (error) return { hata: "Silinemedi: " + error.message };
+
+  revalidatePath(`/subeler/${subeId}`);
+  return { ok: "Kayıt silindi" };
 }
 
 export async function kgKaydet(subeId: string, yil: number, ay: string, kg: number) {

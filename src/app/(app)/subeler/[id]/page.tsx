@@ -2,10 +2,11 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import type { Ay, Sube, Denetim, Skor } from "@/types/database";
+import type { Ay, Sube, Denetim, Skor, SubeSorumluGecmisi } from "@/types/database";
 import { SubeGecmisPaneli, type GecmisKayit } from "@/components/sube-gecmis-paneli";
 import { KgGrid } from "../kg-grid";
 import { DenetimForm } from "../denetim-form";
+import { IletisimKarti, SorumluGecmisi } from "./sube-ana-veri";
 
 export default async function SubeDetaySayfasi({
   params,
@@ -24,8 +25,13 @@ export default async function SubeDetaySayfasi({
 
   if (!sube) notFound();
 
-  const [{ data: aylar }, { data: satislar }, { data: denetimler }, { data: skorlar }] =
-    await Promise.all([
+  const [
+    { data: aylar },
+    { data: satislar },
+    { data: denetimler },
+    { data: skorlar },
+    { data: sorumlular, error: sorumluHata },
+  ] = await Promise.all([
       supabase.from("aylar").select("*").order("yil").returns<Ay[]>(),
       supabase.from("aylik_satislar").select("yil, ay, kg").eq("sube_id", id),
       supabase
@@ -42,7 +48,16 @@ export default async function SubeDetaySayfasi({
         .order("tarih", { ascending: false })
         .limit(10)
         .returns<Skor[]>(),
+      supabase
+        .from("sube_sorumlu_gecmisi")
+        .select("*")
+        .eq("sube_id", id)
+        .returns<SubeSorumluGecmisi[]>(),
     ]);
+
+  // 0010 henüz çalıştırılmadıysa ekranın tamamı kaybolmasın; uyarıyı
+  // yalnızca ilgili kart göstersin.
+  const sorumluTabloYok = Boolean(sorumluHata);
 
   // Denetim + hızlı skor kayıtları tek listede.
   const gecmis: GecmisKayit[] = [
@@ -125,6 +140,16 @@ export default async function SubeDetaySayfasi({
             </>
           )}
         </section>
+
+        <IletisimKarti sube={sube} duzenlenebilir={kgDuzenlenebilir} />
+
+        <SorumluGecmisi
+          sube={sube}
+          kayitlar={sorumlular ?? []}
+          duzenlenebilir={kgDuzenlenebilir}
+          silebilir={profile.rol === "admin" || profile.rol === "genel_mudur"}
+          tabloYok={sorumluTabloYok}
+        />
       </div>
     </div>
   );

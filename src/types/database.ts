@@ -40,8 +40,31 @@ export interface Sube {
   kapanis_tarihi: string | null;
   acilis_tahmini: boolean;
   fiyat_grubu: FiyatGrubu | null;
+  telefon: string;
+  yetkili_telefon: string;
+  eposta: string;
+  adres: string;
+  harita_url: string;
+  enlem: number | null;
+  boylam: number | null;
+  iletisim_notu: string;
   created_at: string;
   updated_at: string;
+}
+
+/** Şube sorumlusunun zaman içindeki değişimi. Dönem [baslangic, bitis). */
+export interface SubeSorumluGecmisi {
+  id: string;
+  sube_id: string;
+  /** 'merkez' = Adıyaman Çiğköfte tarafı, 'sube' = şube tarafındaki işletmeci */
+  taraf: "merkez" | "sube";
+  kisi_adi: string;
+  baslangic: string | null;
+  bitis: string | null;
+  aciklama: string;
+  otomatik: boolean;
+  kaydeden_id: string | null;
+  created_at: string;
 }
 
 export interface Ay {

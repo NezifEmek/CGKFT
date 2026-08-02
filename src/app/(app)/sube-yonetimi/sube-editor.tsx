@@ -261,6 +261,47 @@ export function SubeEditor({
             />
           </Alan>
 
+          <details className="rounded-lg border border-neutral-200 dark:border-neutral-800 px-3 py-2">
+            <summary className="text-xs text-neutral-500 cursor-pointer select-none">
+              İletişim ve konum
+            </summary>
+            <div className="space-y-3 pt-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Alan etiket="Şube telefonu">
+                  <input name="telefon" defaultValue={secili?.telefon ?? ""} className={girdiSinif} />
+                </Alan>
+                <Alan etiket="Yetkili cep">
+                  <input
+                    name="yetkili_telefon"
+                    defaultValue={secili?.yetkili_telefon ?? ""}
+                    className={girdiSinif}
+                  />
+                </Alan>
+              </div>
+              <Alan etiket="E-posta">
+                <input name="eposta" type="email" defaultValue={secili?.eposta ?? ""} className={girdiSinif} />
+              </Alan>
+              <Alan etiket="Adres">
+                <textarea name="adres" rows={2} defaultValue={secili?.adres ?? ""} className={girdiSinif} />
+              </Alan>
+              <Alan etiket="Google Maps bağlantısı">
+                <input
+                  name="harita_url"
+                  defaultValue={secili?.harita_url ?? ""}
+                  placeholder="Paylaş → Bağlantıyı kopyala"
+                  className={girdiSinif}
+                />
+              </Alan>
+              <Alan etiket="İletişim notu">
+                <input
+                  name="iletisim_notu"
+                  defaultValue={secili?.iletisim_notu ?? ""}
+                  className={girdiSinif}
+                />
+              </Alan>
+            </div>
+          </details>
+
           <div className="grid grid-cols-2 gap-3">
             <Alan etiket="Açılış Tarihi">
               <input
