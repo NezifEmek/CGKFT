@@ -47,6 +47,7 @@ export const SAYFALAR: SayfaTanimi[] = [
   { anahtar: "haftalik-faaliyet", href: "/haftalik-faaliyet", etiket: "📅 Haftalık Faaliyet", bolum: "Kurumsal" },
   { anahtar: "franchise-basvuru", href: "/franchise-basvurulari", etiket: "📨 Franchise Başvuruları", bolum: "Kurumsal" },
   { anahtar: "sikayetler", href: "/sikayetler", etiket: "📣 Şikayet Yönetimi", bolum: "Kurumsal" },
+  { anahtar: "uretim", href: "/uretim", etiket: "🏭 Günlük Üretim", bolum: "Kurumsal" },
   { anahtar: "dokuman", href: "/dokuman", etiket: "📄 Doküman Yönetimi", bolum: "Kurumsal" },
   { anahtar: "organizasyon", href: "/organizasyon", etiket: "🏛️ Organizasyon Şeması", bolum: "Kurumsal" },
   { anahtar: "oneriler", href: "/oneriler", etiket: "💡 Öneriler", bolum: "Kurumsal" },
