@@ -72,7 +72,27 @@ export async function sikayetKaydet(_o: Sonuc | null, formData: FormData): Promi
         .maybeSingle();
 
   if (error) {
+    // RLS, RETURNING satırını engellediğinde çıkan mesaj teknik ve
+    // anlaşılmaz oluyor. 2026-08-03'te bölge müdürü tam buna takıldı:
+    // kayıt açılmıyordu ama sebebi ekranda görünmüyordu (bkz. 0023).
+    if (/row-level security|row level security/i.test(error.message)) {
+      return {
+        hata:
+          "Kayıt veritabanı tarafından reddedildi (yetki kuralı). " +
+          "0023_sikayet_kayit_acma_duzeltmesi.sql çalıştırılmadıysa önce onu çalıştırın.",
+      };
+    }
     return { hata: tabloHatasi(error.message) ?? ((id ? "Güncellenemedi: " : "Kaydedilemedi: ") + error.message) };
+  }
+
+  // Hata yok ama kayıt geri gelmediyse: RLS satırı gizlemiş olabilir.
+  // Sessizce "kaydedildi" demek yanlış olurdu — görsel de eklenemez.
+  if (!id && !data?.id) {
+    return {
+      hata:
+        "Kayıt yazıldı ama geri okunamadı; görseller eklenemedi. " +
+        "0023_sikayet_kayit_acma_duzeltmesi.sql çalıştırılmalı. Listeyi yenileyip kontrol edin.",
+    };
   }
 
   // ── Görseller ────────────────────────────────────────────────────────
