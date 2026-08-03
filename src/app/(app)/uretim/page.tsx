@@ -2,14 +2,16 @@ import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { tumSatirlariGetir, sonuclaGetir } from "@/lib/supabase/fetch-all";
 import type { Urun, UretimKaydi } from "@/lib/uretim";
-import { UretimArayuz, type Tanim } from "./uretim-arayuz";
+import { UretimArayuz } from "./uretim-arayuz";
 
 export default async function UretimSayfasi() {
   const profile = await requireProfile();
   const supabase = await createClient();
   const bugun = new Date().toISOString().slice(0, 10);
 
-  const [kayitSonuc, urunler, tanimlar] = await Promise.all([
+  // uretim_tanimlari (tesis/hat/vardiya) artık okunmuyor — o alanlar
+  // formdan kaldırıldı. Tablo veritabanında duruyor ama kullanılmıyor.
+  const [kayitSonuc, urunler] = await Promise.all([
     sonuclaGetir<UretimKaydi>(() =>
       tumSatirlariGetir<UretimKaydi>((f, t) =>
         supabase
@@ -28,16 +30,6 @@ export default async function UretimSayfasi() {
         .range(f, t)
         .returns<Urun[]>(),
     ).catch(() => [] as Urun[]),
-    tumSatirlariGetir<Tanim>((f, t) =>
-      supabase
-        .from("uretim_tanimlari")
-        .select("*")
-        .order("tur")
-        .order("sira")
-        .order("ad")
-        .range(f, t)
-        .returns<Tanim[]>(),
-    ).catch(() => [] as Tanim[]),
   ]);
 
   const yazabilir = profile.rol !== "denetmen";
@@ -59,7 +51,6 @@ export default async function UretimSayfasi() {
         // Pasif ürünler listede kalır (geçmiş kayıtlar okunabilsin diye),
         // ekran onları "(pasif)" diye işaretler.
         urunler={urunler}
-        tanimlar={tanimlar.filter((t) => t.aktif !== false)}
         bugun={bugun}
         yazabilir={yazabilir}
         yonetimMi={yonetimMi}

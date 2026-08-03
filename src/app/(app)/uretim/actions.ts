@@ -56,9 +56,9 @@ export async function kayitKaydet(_o: Sonuc | null, formData: FormData): Promise
 
   const alanlar = {
     tarih: m(formData, "tarih") || new Date().toISOString().slice(0, 10),
-    tesis: m(formData, "tesis"),
-    hat: m(formData, "hat"),
-    vardiya: m(formData, "vardiya"),
+    // Tesis / hat / vardiya kaldırıldı (Nezif: "bu yapıda gerek yok").
+    // Sütunlar veritabanında duruyor ama artık yazılmıyor — eski kayıtların
+    // içeriği bozulmasın diye silinmedi.
     urun_id: urun.id,
     // Ürün tanımı sonradan değişse bile kayıt okunabilir kalsın.
     urun_kod: urun.kod,
@@ -89,7 +89,7 @@ export async function kayitKaydet(_o: Sonuc | null, formData: FormData): Promise
   return {
     ok:
       kg == null
-        ? "Kaydedildi — ancak kg karşılığı hesaplanamadı. Ürün tanımında birim ağırlık (ve koli için koli adedi) eksik; bu kayıt toplamlara girmez."
+        ? `Kaydedildi — ${miktar} ${olcuBirimi} olarak. Bu ürünün kilogram karşılığı tanımlı değil, adet toplamına giriyor.`
         : `Kaydedildi (${kg} kg)`,
   };
 }
@@ -107,6 +107,50 @@ export async function kayitSil(_o: Sonuc | null, formData: FormData): Promise<So
 
   revalidatePath(YOL);
   return { ok: "Kayıt silindi" };
+}
+
+/**
+ * Seçilen kayıtları topluca siler.
+ *
+ * Kimlikler ekrandan geliyor; yani kullanıcı ne sildiğini görerek
+ * seçiyor. "Filtredekilerin hepsi" seçeneği de aynı yoldan geçiyor —
+ * sunucuya filtre değil, kimlik listesi gönderiliyor. Böylece ekranda
+ * görülen liste ile silinen liste birebir aynı oluyor; filtreyi sunucuda
+ * yeniden yorumlasaydım aradaki en küçük fark yanlış kayıt silerdi.
+ *
+ * Silinen her satır 0019'daki silme günlüğüne tam içeriğiyle düşer.
+ */
+export async function topluKayitSil(
+  idler: string[],
+): Promise<{ silinen: number; hata?: string }> {
+  const { hata } = await yazabilirMi();
+  if (hata) return { silinen: 0, hata };
+
+  const temiz = [...new Set(idler.filter((x) => typeof x === "string" && x.trim()))];
+  if (!temiz.length) return { silinen: 0, hata: "Silinecek kayıt seçilmedi." };
+
+  const supabase = await createClient();
+
+  // Parça parça: tek istekte binlerce kimlik göndermek isteği şişiriyor.
+  let silinen = 0;
+  for (let i = 0; i < temiz.length; i += 200) {
+    const parca = temiz.slice(i, i + 200);
+    const { data, error } = await supabase
+      .from("uretim_kayitlari")
+      .delete()
+      .in("id", parca)
+      .select("id");
+    if (error) {
+      return {
+        silinen,
+        hata: `${silinen} kayıt silindikten sonra durdu: ${error.message}`,
+      };
+    }
+    silinen += data?.length ?? 0;
+  }
+
+  revalidatePath(YOL);
+  return { silinen };
 }
 
 // ─── Ürün tanımı ──────────────────────────────────────────────────────────
@@ -157,7 +201,7 @@ export async function urunKaydet(_o: Sonuc | null, formData: FormData): Promise<
   return {
     ok: alanlar.birim_agirlik_kg
       ? "Ürün kaydedildi"
-      : "Ürün kaydedildi — birim ağırlık girilmediği için bu ürünün adet/koli üretimi kg'a çevrilemeyecek.",
+      : "Ürün kaydedildi. Birim ağırlık girilmedi — bu ürünün üretimi kilogram yerine ADET olarak toplanacak (lavaş gibi ürünler için normaldir).",
   };
 }
 
@@ -182,53 +226,10 @@ export async function urunSil(_o: Sonuc | null, formData: FormData): Promise<Son
   return { ok: "Ürün silindi" };
 }
 
-// ─── Tesis / hat / vardiya tanımları ──────────────────────────────────────
-
-export async function tanimEkle(_o: Sonuc | null, formData: FormData): Promise<Sonuc> {
-  const profile = await requireProfile();
-  if (profile.rol !== "admin" && profile.rol !== "genel_mudur") {
-    return { hata: "Tanım ekleme yetkisi admin/genel müdürde." };
-  }
-
-  const tur = m(formData, "tur");
-  const ad = m(formData, "ad");
-  if (!["tesis", "hat", "vardiya"].includes(tur)) return { hata: "Geçersiz tanım türü." };
-  if (!ad) return { hata: "Ad boş olamaz." };
-
-  const supabase = await createClient();
-  const { error } = await supabase.from("uretim_tanimlari").insert({ tur, ad });
-  if (error) {
-    if (/duplicate key/i.test(error.message)) return { hata: `"${ad}" zaten tanımlı.` };
-    return { hata: tabloHatasi(error.message) ?? "Eklenemedi: " + error.message };
-  }
-
-  revalidatePath(YOL);
-  return { ok: "Tanım eklendi" };
-}
-
-export async function tanimSil(_o: Sonuc | null, formData: FormData): Promise<Sonuc> {
-  const profile = await requireProfile();
-  if (profile.rol !== "admin" && profile.rol !== "genel_mudur") {
-    return { hata: "Tanım silme yetkisi admin/genel müdürde." };
-  }
-  const id = m(formData, "tanim_id");
-  if (!id) return { hata: "Tanım seçili değil." };
-
-  const supabase = await createClient();
-  const { error } = await supabase.from("uretim_tanimlari").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
-
-  revalidatePath(YOL);
-  return { ok: "Tanım silindi" };
-}
-
 // ─── Excel'den toplu içe aktarma ──────────────────────────────────────────
 
 export interface AktarSatir {
   tarih?: string;
-  tesis?: string;
-  hat?: string;
-  vardiya?: string;
   urun_kod?: string;
   urun_ad?: string;
   miktar?: string;
@@ -300,9 +301,6 @@ export async function topluAktar(
 
     eklenecek.push({
       tarih,
-      tesis: s.tesis ?? "",
-      hat: s.hat ?? "",
-      vardiya: s.vardiya ?? "",
       urun_id: urun.id,
       urun_kod: urun.kod,
       urun_ad: urun.ad,

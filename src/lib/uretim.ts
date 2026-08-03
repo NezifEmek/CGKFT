@@ -86,14 +86,22 @@ function yuvarla(n: number): number {
   return Math.round(n * 1000) / 1000;
 }
 
-/** Çevrilemeyen kayıt sayısı — toplamın ne kadarını kaçırdığımızı söyler. */
-export function cevrilemeyen(kayitlar: UretimKaydi[]): UretimKaydi[] {
+/**
+ * Kilogram karşılığı olmayan kayıtlar.
+ *
+ * Bu bir HATA DEĞİL: lavaş gibi bazı ürünler kilogramla ölçülmüyor, adet
+ * olarak üretiliyor. Önceden bunlar "çevrilemedi" diye uyarı üretiyordu;
+ * artık ayrı bir toplamda sayılıyorlar.
+ */
+export function kgsizKayitlar(kayitlar: UretimKaydi[]): UretimKaydi[] {
   return kayitlar.filter((k) => say(k.kg_karsiligi) == null);
 }
 
 export interface Kirilim {
   anahtar: string;
   kg: number;
+  /** Kilogramı olmayan ürünlerin miktarı (adet/koli — kendi biriminde) */
+  adet: number;
   kayit: number;
 }
 
@@ -101,51 +109,79 @@ function kir(
   kayitlar: UretimKaydi[],
   al: (k: UretimKaydi) => string,
 ): Kirilim[] {
-  const m = new Map<string, { kg: number; kayit: number }>();
+  const m = new Map<string, { kg: number; adet: number; kayit: number }>();
   for (const k of kayitlar) {
     const a = al(k) || "(belirtilmemiş)";
-    const kg = say(k.kg_karsiligi) ?? 0;
-    const v = m.get(a) ?? { kg: 0, kayit: 0 };
-    v.kg += kg;
+    const kg = say(k.kg_karsiligi);
+    const v = m.get(a) ?? { kg: 0, adet: 0, kayit: 0 };
+    if (kg == null) v.adet += say(k.miktar) ?? 0;
+    else v.kg += kg;
     v.kayit++;
     m.set(a, v);
   }
   return [...m.entries()]
-    .map(([anahtar, v]) => ({ anahtar, kg: yuvarla(v.kg), kayit: v.kayit }))
-    .sort((a, b) => b.kg - a.kg);
+    .map(([anahtar, v]) => ({
+      anahtar,
+      kg: yuvarla(v.kg),
+      adet: yuvarla(v.adet),
+      kayit: v.kayit,
+    }))
+    // Kilogramı olanlar önce, sonra adetliler — ikisi aynı sütunda
+    // toplanamayacağı için sıralama da ayrı yapılıyor.
+    .sort((a, b) => b.kg - a.kg || b.adet - a.adet);
 }
 
 export interface UretimOzet {
   toplamKg: number;
+  /** Kilogramla ölçülmeyen ürünlerin toplam miktarı (lavaş vb.) */
+  toplamAdet: number;
   kayitSayisi: number;
-  cevrilemeyenSayisi: number;
+  /** Kilogramla ölçülmeyen kayıt sayısı — uyarı değil, bilgi */
+  adetliKayitSayisi: number;
   bugunKg: number;
+  bugunAdet: number;
   buAyKg: number;
+  buAyAdet: number;
   gunlukOrtalamaKg: number | null;
   uretimGunuSayisi: number;
 
   urunler: Kirilim[];
   gruplar: Kirilim[];
   ambalajlar: Kirilim[];
-  tesisler: Kirilim[];
-  hatlar: Kirilim[];
-  vardiyalar: Kirilim[];
   gunluk: { tarih: string; kg: number }[];
   aylik: { ay: string; kg: number }[];
 }
 
+/**
+ * Üretim özeti.
+ *
+ * Toplam TEK bir sayı değil: kilogramla ölçülen ürünler kg, ölçülmeyenler
+ * (lavaş gibi) kendi biriminde toplanıyor. İkisini tek sayıda birleştirmek
+ * anlamsız olurdu — 500 kg ile 300 adet lavaş toplanamaz.
+ */
 export function uretimOzeti(kayitlar: UretimKaydi[], bugun: string): UretimOzet {
   let toplamKg = 0;
+  let toplamAdet = 0;
   const gunMap = new Map<string, number>();
+  const gunAdetMap = new Map<string, number>();
   const ayMap = new Map<string, number>();
+  const ayAdetMap = new Map<string, number>();
 
   for (const k of kayitlar) {
-    const kg = say(k.kg_karsiligi) ?? 0;
-    toplamKg += kg;
+    const kg = say(k.kg_karsiligi);
     const g = k.tarih.slice(0, 10);
-    gunMap.set(g, (gunMap.get(g) ?? 0) + kg);
     const a = k.tarih.slice(0, 7);
-    ayMap.set(a, (ayMap.get(a) ?? 0) + kg);
+
+    if (kg == null) {
+      const adet = say(k.miktar) ?? 0;
+      toplamAdet += adet;
+      gunAdetMap.set(g, (gunAdetMap.get(g) ?? 0) + adet);
+      ayAdetMap.set(a, (ayAdetMap.get(a) ?? 0) + adet);
+    } else {
+      toplamKg += kg;
+      gunMap.set(g, (gunMap.get(g) ?? 0) + kg);
+      ayMap.set(a, (ayMap.get(a) ?? 0) + kg);
+    }
   }
 
   const gunluk = [...gunMap.entries()]
@@ -156,18 +192,18 @@ export function uretimOzeti(kayitlar: UretimKaydi[], bugun: string): UretimOzet 
 
   return {
     toplamKg: yuvarla(toplamKg),
+    toplamAdet: yuvarla(toplamAdet),
     kayitSayisi: kayitlar.length,
-    cevrilemeyenSayisi: cevrilemeyen(kayitlar).length,
+    adetliKayitSayisi: kgsizKayitlar(kayitlar).length,
     bugunKg: yuvarla(gunMap.get(bugun) ?? 0),
+    bugunAdet: yuvarla(gunAdetMap.get(bugun) ?? 0),
     buAyKg: yuvarla(ayMap.get(bugun.slice(0, 7)) ?? 0),
+    buAyAdet: yuvarla(ayAdetMap.get(bugun.slice(0, 7)) ?? 0),
     gunlukOrtalamaKg: uretimGunu ? yuvarla(toplamKg / uretimGunu) : null,
     uretimGunuSayisi: uretimGunu,
     urunler: kir(kayitlar, (k) => k.urun_ad || k.urun_kod),
     gruplar: kir(kayitlar, (k) => k.urun_grup),
     ambalajlar: kir(kayitlar, (k) => k.ambalaj_tipi),
-    tesisler: kir(kayitlar, (k) => k.tesis),
-    hatlar: kir(kayitlar, (k) => k.hat),
-    vardiyalar: kir(kayitlar, (k) => k.vardiya),
     gunluk,
     aylik: [...ayMap.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
@@ -181,9 +217,26 @@ export function kgYaz(n: number | null | undefined): string {
   return n.toLocaleString("tr-TR", { maximumFractionDigits: 1 }) + " kg";
 }
 
+/** Adet/koli miktarını okunur yazar. */
+export function adetYaz(n: number | null | undefined): string {
+  if (n == null || n === 0) return "";
+  return n.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+}
+
+/**
+ * Bir kırılım satırının okunur karşılığı.
+ * Kilogramı olan "1.234 kg", olmayan "300 adet" gösterir.
+ */
+export function miktarYaz(k: Pick<Kirilim, "kg" | "adet">): string {
+  const parcalar: string[] = [];
+  if (k.kg > 0) parcalar.push(kgYaz(k.kg));
+  if (k.adet > 0) parcalar.push(`${adetYaz(k.adet)} adet`);
+  return parcalar.join(" + ") || "—";
+}
+
 export function uretimCsv(kayitlar: UretimKaydi[]): string {
   const basliklar = [
-    "Tarih", "Tesis", "Hat", "Vardiya", "Ürün Kodu", "Ürün Adı", "Ürün Grubu",
+    "Tarih", "Ürün Kodu", "Ürün Adı", "Ürün Grubu",
     "Ambalaj Tipi", "Miktar", "Ölçü Birimi", "Kg Karşılığı", "Parti No",
     "SKT", "Operatör", "Açıklama",
   ];
@@ -193,7 +246,7 @@ export function uretimCsv(kayitlar: UretimKaydi[]): string {
   };
   const satirlar = kayitlar.map((k) =>
     [
-      k.tarih, k.tesis, k.hat, k.vardiya, k.urun_kod, k.urun_ad, k.urun_grup,
+      k.tarih, k.urun_kod, k.urun_ad, k.urun_grup,
       k.ambalaj_tipi, k.miktar, k.olcu_birimi, k.kg_karsiligi ?? "", k.parti_no,
       k.skt ?? "", k.operator, k.aciklama,
     ].map(kacir).join(";"),

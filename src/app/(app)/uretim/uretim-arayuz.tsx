@@ -2,11 +2,11 @@
 
 import { useActionState, useMemo, useState } from "react";
 import {
-  kayitKaydet, kayitSil, urunKaydet, urunSil, tanimEkle, tanimSil, topluAktar,
+  kayitKaydet, kayitSil, urunKaydet, urunSil, topluAktar, topluKayitSil,
   type AktarSatir,
 } from "./actions";
 import {
-  uretimOzeti, uretimCsv, kgYaz, kilogramaCevir, basligiTani,
+  uretimOzeti, uretimCsv, kgYaz, adetYaz, miktarYaz, kilogramaCevir, basligiTani,
   OLCU_BIRIMLERI, AMBALAJ_BIRIMLERI, type Urun, type UretimKaydi, type Kirilim,
 } from "@/lib/uretim";
 import { YazdirDugmesi } from "@/components/yazdir-dugmesi";
@@ -27,7 +27,9 @@ export interface Tanim {
   aktif: boolean;
 }
 
-type Sekme = "panel" | "giris" | "kayitlar" | "urunler" | "ayarlar";
+// Tesis / hat / vardiya kaldırıldı (Nezif: "bu yapıda gerek yok"), o yüzden
+// "Tanımlar" sekmesi de yok — içinde sadece o üç liste vardı.
+type Sekme = "panel" | "giris" | "kayitlar" | "urunler";
 
 function tarihYaz(t: string | null | undefined): string {
   if (!t) return "";
@@ -36,11 +38,10 @@ function tarihYaz(t: string | null | undefined): string {
 }
 
 export function UretimArayuz({
-  kayitlar, urunler, tanimlar, bugun, yazabilir, yonetimMi, tabloYok,
+  kayitlar, urunler, bugun, yazabilir, yonetimMi, tabloYok,
 }: {
   kayitlar: UretimKaydi[];
   urunler: Urun[];
-  tanimlar: Tanim[];
   bugun: string;
   yazabilir: boolean;
   yonetimMi: boolean;
@@ -50,28 +51,24 @@ export function UretimArayuz({
   const [duzenlenen, setDuzenlenen] = useState<UretimKaydi | null>(null);
   const [duzenlenenUrun, setDuzenlenenUrun] = useState<Urun | null>(null);
 
+  // Toplu silme: seçili kayıt kimlikleri
+  const [secili, setSecili] = useState<Set<string>>(new Set());
+  const [siliniyor, setSiliniyor] = useState(false);
+  const [silmeSonuc, setSilmeSonuc] = useState<string | null>(null);
+
   // Filtreler
   const [fBas, setFBas] = useState("");
   const [fBit, setFBit] = useState("");
   const [fUrun, setFUrun] = useState("");
   const [fGrup, setFGrup] = useState("");
   const [fAmbalaj, setFAmbalaj] = useState("");
-  const [fTesis, setFTesis] = useState("");
-  const [fHat, setFHat] = useState("");
-  const [fVardiya, setFVardiya] = useState("");
   const [fParti, setFParti] = useState("");
 
   const [d1, a1, p1] = useActionState(kayitKaydet, null);
   const [d2, a2, p2] = useActionState(kayitSil, null);
   const [d3, a3, p3] = useActionState(urunKaydet, null);
   const [d4, a4, p4] = useActionState(urunSil, null);
-  const [d5, a5, p5] = useActionState(tanimEkle, null);
-  const [d6, a6, p6] = useActionState(tanimSil, null);
-  const durum = d1 ?? d2 ?? d3 ?? d4 ?? d5 ?? d6;
-
-  const tesisler = tanimlar.filter((t) => t.tur === "tesis");
-  const hatlar = tanimlar.filter((t) => t.tur === "hat");
-  const vardiyalar = tanimlar.filter((t) => t.tur === "vardiya");
+  const durum = d1 ?? d2 ?? d3 ?? d4;
 
   const gruplar = useMemo(
     () => [...new Set(urunler.map((u) => u.grup).filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr")),
@@ -90,17 +87,47 @@ export function UretimArayuz({
       if (fUrun && k.urun_id !== fUrun) return false;
       if (fGrup && k.urun_grup !== fGrup) return false;
       if (fAmbalaj && k.ambalaj_tipi !== fAmbalaj) return false;
-      if (fTesis && k.tesis !== fTesis) return false;
-      if (fHat && k.hat !== fHat) return false;
-      if (fVardiya && k.vardiya !== fVardiya) return false;
       if (parti && !k.parti_no.toLocaleLowerCase("tr").includes(parti)) return false;
       return true;
     });
-  }, [kayitlar, fBas, fBit, fUrun, fGrup, fAmbalaj, fTesis, fHat, fVardiya, fParti]);
+  }, [kayitlar, fBas, fBit, fUrun, fGrup, fAmbalaj, fParti]);
 
   const ozet = useMemo(() => uretimOzeti(listelenen, bugun), [listelenen, bugun]);
 
-  const filtreVar = fBas || fBit || fUrun || fGrup || fAmbalaj || fTesis || fHat || fVardiya || fParti;
+  const filtreVar = fBas || fBit || fUrun || fGrup || fAmbalaj || fParti;
+
+  // ── Toplu silme ──────────────────────────────────────────────────────
+  const seciliListede = listelenen.filter((k) => secili.has(k.id));
+
+  function secimDegistir(id: string, isaretli: boolean) {
+    setSecili((s) => {
+      const y = new Set(s);
+      if (isaretli) y.add(id);
+      else y.delete(id);
+      return y;
+    });
+  }
+
+  async function seciliSil(hepsiMi: boolean) {
+    const hedef = hepsiMi ? listelenen : seciliListede;
+    if (!hedef.length) return;
+
+    const soru = hepsiMi
+      ? `Filtredeki ${hedef.length} kaydın TAMAMI silinecek. Emin misiniz?`
+      : `Seçili ${hedef.length} kayıt silinecek. Emin misiniz?`;
+    if (!window.confirm(soru + "\n\nSilinen kayıtlar silme günlüğüne yazılır, geri alınabilir.")) return;
+
+    setSiliniyor(true);
+    setSilmeSonuc(null);
+    const sonuc = await topluKayitSil(hedef.map((k) => k.id));
+    setSiliniyor(false);
+    setSecili(new Set());
+    setSilmeSonuc(
+      sonuc.hata
+        ? sonuc.hata
+        : `${sonuc.silinen} kayıt silindi. Geri almak gerekirse silme günlüğünde duruyor.`,
+    );
+  }
 
   function csvIndir() {
     const a = document.createElement("a");
@@ -123,7 +150,7 @@ export function UretimArayuz({
         <div className="flex rounded-lg border border-neutral-300 dark:border-neutral-700 overflow-hidden">
           {([
             ["panel", "📊 Panel"], ["giris", "✏️ Üretim Girişi"], ["kayitlar", "📋 Kayıtlar"],
-            ["urunler", "📦 Ürünler"], ["ayarlar", "⚙️ Tanımlar"],
+            ["urunler", "📦 Ürünler"],
           ] as const).map(([k, e]) => (
             <button
               key={k}
@@ -169,23 +196,11 @@ export function UretimArayuz({
             <option value="">Tüm ambalajlar</option>
             {ambalajlar.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
-          <select value={fTesis} onChange={(e) => setFTesis(e.target.value)} className={gir}>
-            <option value="">Tüm tesisler</option>
-            {tesisler.map((t) => <option key={t.id} value={t.ad}>{t.ad}</option>)}
-          </select>
-          <select value={fHat} onChange={(e) => setFHat(e.target.value)} className={gir}>
-            <option value="">Tüm hatlar</option>
-            {hatlar.map((t) => <option key={t.id} value={t.ad}>{t.ad}</option>)}
-          </select>
-          <select value={fVardiya} onChange={(e) => setFVardiya(e.target.value)} className={gir}>
-            <option value="">Tüm vardiyalar</option>
-            {vardiyalar.map((t) => <option key={t.id} value={t.ad}>{t.ad}</option>)}
-          </select>
           <input value={fParti} onChange={(e) => setFParti(e.target.value)} placeholder="Parti no" className={gir + " w-28"} />
           {filtreVar && (
             <button
               type="button"
-              onClick={() => { setFBas(""); setFBit(""); setFUrun(""); setFGrup(""); setFAmbalaj(""); setFTesis(""); setFHat(""); setFVardiya(""); setFParti(""); }}
+              onClick={() => { setFBas(""); setFBit(""); setFUrun(""); setFGrup(""); setFAmbalaj(""); setFParti(""); }}
               className="text-xs text-neutral-500 hover:underline"
             >
               temizle ({listelenen.length}/{kayitlar.length})
@@ -197,31 +212,37 @@ export function UretimArayuz({
       {/* ── PANEL ─────────────────────────────────────────────────── */}
       {sekme === "panel" && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+          {/* Toplam TEK sayı değil: kilogramla ölçülenler kg, lavaş gibi
+              ölçülmeyenler adet olarak ayrı toplanıyor. İkisini birleştirmek
+              anlamsız olurdu. */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {[
-              { s: kgYaz(ozet.bugunKg), e: "Bugünkü üretim" },
-              { s: kgYaz(ozet.buAyKg), e: "Bu ay" },
-              { s: kgYaz(ozet.toplamKg), e: "Seçili dönem toplamı" },
-              { s: kgYaz(ozet.gunlukOrtalamaKg), e: `Günlük ortalama (${ozet.uretimGunuSayisi} gün)` },
+              { kg: ozet.bugunKg, adet: ozet.bugunAdet, e: "Bugünkü üretim" },
+              { kg: ozet.buAyKg, adet: ozet.buAyAdet, e: "Bu ay" },
+              { kg: ozet.toplamKg, adet: ozet.toplamAdet, e: "Seçili dönem toplamı" },
               {
-                s: ozet.cevrilemeyenSayisi,
-                e: "Kg'a çevrilemeyen kayıt",
-                r: ozet.cevrilemeyenSayisi ? "#dc2626" : undefined,
+                kg: ozet.gunlukOrtalamaKg ?? 0,
+                adet: 0,
+                e: `Günlük ortalama (${ozet.uretimGunuSayisi} gün)`,
               },
             ].map((x) => (
               <div key={x.e} className={kart + " p-3 text-center"}>
-                <div className="text-base font-extrabold" style={{ color: x.r }}>{x.s}</div>
+                <div className="text-base font-extrabold">{kgYaz(x.kg)}</div>
+                {x.adet > 0 && (
+                  <div className="text-sm font-semibold text-neutral-600 dark:text-neutral-400">
+                    + {adetYaz(x.adet)} adet
+                  </div>
+                )}
                 <div className="text-[10px] text-neutral-500">{x.e}</div>
               </div>
             ))}
           </div>
 
-          {ozet.cevrilemeyenSayisi > 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-3 text-sm text-amber-800 dark:text-amber-300">
-              <b>{ozet.cevrilemeyenSayisi} kayıt toplamlara girmiyor.</b> Bu kayıtların ürün
-              tanımında birim ağırlık (koli girildiyse koli adedi) eksik olduğu için kilogram
-              karşılığı hesaplanamıyor. Ürünler sekmesinden tamamlanınca yeni kayıtlar toplama
-              dahil olur.
+          {ozet.adetliKayitSayisi > 0 && (
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3 text-sm text-neutral-600 dark:text-neutral-400">
+              {ozet.adetliKayitSayisi} kayıt <b>adet</b> olarak sayılıyor — bu ürünlerin
+              kilogram karşılığı tanımlı değil (lavaş gibi ürünlerde normaldir). Kilogramla
+              toplanmaları gerekiyorsa Ürünler sekmesinden birim ağırlık girin.
             </div>
           )}
 
@@ -232,13 +253,10 @@ export function UretimArayuz({
             </div>
           )}
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid md:grid-cols-3 gap-3">
             <Dagilim baslik="Ürün bazında" veri={ozet.urunler} />
             <Dagilim baslik="Ürün grubu bazında" veri={ozet.gruplar} />
             <Dagilim baslik="Ambalaj bazında" veri={ozet.ambalajlar} />
-            <Dagilim baslik="Tesis bazında" veri={ozet.tesisler} />
-            <Dagilim baslik="Hat bazında" veri={ozet.hatlar} />
-            <Dagilim baslik="Vardiya bazında" veri={ozet.vardiyalar} />
           </div>
 
           {ozet.aylik.length > 1 && (
@@ -269,9 +287,6 @@ export function UretimArayuz({
               action={a1}
               pending={p1}
               urunler={urunler}
-              tesisler={tesisler}
-              hatlar={hatlar}
-              vardiyalar={vardiyalar}
               bugun={bugun}
               duzenlenen={duzenlenen}
               iptal={() => setDuzenlenen(null)}
@@ -285,26 +300,85 @@ export function UretimArayuz({
       {/* ── KAYITLAR ──────────────────────────────────────────────── */}
       {sekme === "kayitlar" && (
         <div className={kart + " overflow-hidden"}>
-          <div className="px-3 py-2 text-xs text-neutral-500 border-b border-neutral-100 dark:border-neutral-800 flex justify-between">
-            <span>{listelenen.length} kayıt</span>
-            <span className="font-medium">Toplam {kgYaz(ozet.toplamKg)}</span>
+          <div className="px-3 py-2 text-xs border-b border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center gap-2">
+            <span className="text-neutral-500">{listelenen.length} kayıt</span>
+            <span className="font-medium">
+              Toplam {kgYaz(ozet.toplamKg)}
+              {ozet.toplamAdet > 0 ? ` + ${adetYaz(ozet.toplamAdet)} adet` : ""}
+            </span>
+
+            {yazabilir && listelenen.length > 0 && (
+              <span className="ml-auto flex flex-wrap items-center gap-2 yazdirma-gizle">
+                {seciliListede.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => seciliSil(false)}
+                    disabled={siliniyor}
+                    className="rounded-md border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 px-3 py-1 text-xs font-medium disabled:opacity-60"
+                  >
+                    🗑 Seçili {seciliListede.length} kaydı sil
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => seciliSil(true)}
+                  disabled={siliniyor}
+                  className="rounded-md border border-neutral-300 dark:border-neutral-700 px-3 py-1 text-xs disabled:opacity-60"
+                  title="Filtreye uyan tüm kayıtları siler"
+                >
+                  {siliniyor ? "Siliniyor…" : `Filtredeki ${listelenen.length} kaydın tümünü sil`}
+                </button>
+              </span>
+            )}
           </div>
+
+          {silmeSonuc && (
+            <div className="px-3 py-2 text-sm border-b border-neutral-100 dark:border-neutral-800 text-neutral-700 dark:text-neutral-300">
+              {silmeSonuc}
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-neutral-50 dark:bg-neutral-800/60 text-xs text-neutral-500">
                 <tr>
-                  {["Tarih", "Tesis", "Hat", "Vardiya", "Ürün", "Ambalaj", "Miktar", "Kg", "Parti", "Operatör", ""].map((b) => (
+                  {yazabilir && (
+                    <th className="px-3 py-2 w-8">
+                      <input
+                        type="checkbox"
+                        title="Tümünü seç"
+                        checked={listelenen.length > 0 && seciliListede.length === listelenen.length}
+                        onChange={(e) =>
+                          setSecili(e.target.checked ? new Set(listelenen.map((k) => k.id)) : new Set())
+                        }
+                      />
+                    </th>
+                  )}
+                  {["Tarih", "Ürün", "Ambalaj", "Miktar", "Kg", "Parti", "Operatör", ""].map((b) => (
                     <th key={b} className="text-left font-medium px-3 py-2 whitespace-nowrap">{b}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {listelenen.map((k) => (
-                  <tr key={k.id} className="border-t border-neutral-100 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/40">
+                  <tr
+                    key={k.id}
+                    className={`border-t border-neutral-100 dark:border-neutral-800 ${
+                      secili.has(k.id)
+                        ? "bg-red-50/60 dark:bg-red-950/20"
+                        : "hover:bg-neutral-50 dark:hover:bg-neutral-800/40"
+                    }`}
+                  >
+                    {yazabilir && (
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          checked={secili.has(k.id)}
+                          onChange={(e) => secimDegistir(k.id, e.target.checked)}
+                        />
+                      </td>
+                    )}
                     <td className="px-3 py-2 whitespace-nowrap">{tarihYaz(k.tarih)}</td>
-                    <td className="px-3 py-2 text-neutral-500">{k.tesis || "—"}</td>
-                    <td className="px-3 py-2 text-neutral-500">{k.hat || "—"}</td>
-                    <td className="px-3 py-2 text-neutral-500">{k.vardiya || "—"}</td>
                     <td className="px-3 py-2">{k.urun_ad}</td>
                     <td className="px-3 py-2 text-neutral-500">{k.ambalaj_tipi || "—"}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
@@ -312,8 +386,8 @@ export function UretimArayuz({
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap font-medium">
                       {k.kg_karsiligi == null ? (
-                        <span className="text-amber-600 text-xs" title="Ürün tanımında birim ağırlık eksik">
-                          çevrilemedi
+                        <span className="text-neutral-400 text-xs" title="Bu ürün adet olarak sayılıyor">
+                          adet bazlı
                         </span>
                       ) : (
                         kgYaz(Number(k.kg_karsiligi))
@@ -380,7 +454,8 @@ export function UretimArayuz({
                         <td className="px-3 py-2 text-neutral-500">{u.ambalaj_tipi || "—"}</td>
                         <td className="px-3 py-2">
                           {eksik ? (
-                            <span className="text-amber-600 text-xs">eksik ⚠</span>
+                            // Uyarı değil: lavaş gibi ürünlerde kilogram yok.
+                            <span className="text-neutral-400 text-xs">adet bazlı</span>
                           ) : (
                             `${u.birim_agirlik_kg} kg`
                           )}
@@ -443,8 +518,8 @@ export function UretimArayuz({
                 </A>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <A e="Bir adet kaç kg? *">
-                  <input name="birim_agirlik_kg" inputMode="decimal" placeholder="0,1"
+                <A e="Bir adet kaç kg?">
+                  <input name="birim_agirlik_kg" inputMode="decimal" placeholder="boş = adet bazlı"
                     defaultValue={duzenlenenUrun?.birim_agirlik_kg ?? ""} className={gir + " w-full"} />
                 </A>
                 <A e="Bir kolide kaç adet?">
@@ -453,9 +528,10 @@ export function UretimArayuz({
                 </A>
               </div>
               <p className="text-[11px] text-neutral-500">
-                Birim ağırlık, üretimin kilograma çevrilmesi için gerekli. Boş bırakılırsa bu
-                ürünün adet/koli girişleri toplamlara giremez. Koli cinsinden giriş yapacaksanız
-                koli adedi de gerekli.
+                Birim ağırlık <b>zorunlu değil</b>. Girilirse üretim kilograma çevrilip kg
+                toplamına, girilmezse <b>adet</b> toplamına yazılır — lavaş gibi kilogramla
+                ölçülmeyen ürünlerde boş bırakın. Koli cinsinden giriş yapacaksanız koli adedi
+                gerekir.
               </p>
               <A e="Raf ömrü (gün)">
                 <input name="raf_omru_gun" inputMode="numeric" defaultValue={duzenlenenUrun?.raf_omru_gun ?? ""} className={gir + " w-full"} />
@@ -472,43 +548,6 @@ export function UretimArayuz({
         </div>
       )}
 
-      {/* ── TANIMLAR ──────────────────────────────────────────────── */}
-      {sekme === "ayarlar" && (
-        <div className="grid md:grid-cols-3 gap-3">
-          {([["tesis", "Üretim Tesisleri"], ["hat", "Üretim Hatları"], ["vardiya", "Vardiyalar"]] as const).map(
-            ([tur, baslik]) => (
-              <div key={tur} className={kart + " p-4"}>
-                <h3 className="text-sm font-semibold mb-2">{baslik}</h3>
-                <ul className="space-y-1 mb-3">
-                  {tanimlar.filter((t) => t.tur === tur).map((t) => (
-                    <li key={t.id} className="flex items-center gap-2 text-sm">
-                      <span className="flex-1">{t.ad}</span>
-                      {yonetimMi && (
-                        <form action={a6}>
-                          <input type="hidden" name="tanim_id" value={t.id} />
-                          <button type="submit" disabled={p6} className="text-xs text-red-500 hover:underline">
-                            sil
-                          </button>
-                        </form>
-                      )}
-                    </li>
-                  ))}
-                  {!tanimlar.some((t) => t.tur === tur) && (
-                    <li className="text-sm text-neutral-400">Henüz tanım yok.</li>
-                  )}
-                </ul>
-                {yonetimMi && (
-                  <form action={a5} className="flex gap-2">
-                    <input type="hidden" name="tur" value={tur} />
-                    <input name="ad" required placeholder="Yeni…" className={gir + " flex-1 min-w-0"} />
-                    <button type="submit" disabled={p5} className={btnSade}>Ekle</button>
-                  </form>
-                )}
-              </div>
-            ),
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -526,14 +565,11 @@ function A({ e, children }: { e: string; children: React.ReactNode }) {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function UretimFormu({
-  action, pending, urunler, tesisler, hatlar, vardiyalar, bugun, duzenlenen, iptal, yazabilir,
+  action, pending, urunler, bugun, duzenlenen, iptal, yazabilir,
 }: {
   action: any;
   pending: boolean;
   urunler: Urun[];
-  tesisler: Tanim[];
-  hatlar: Tanim[];
-  vardiyalar: Tanim[];
   bugun: string;
   duzenlenen: UretimKaydi | null;
   iptal: () => void;
@@ -571,24 +607,6 @@ function UretimFormu({
       <div className="grid sm:grid-cols-4 gap-2">
         <A e="Üretim tarihi *">
           <input name="tarih" type="date" required defaultValue={duzenlenen?.tarih ?? bugun} className={gir + " w-full"} />
-        </A>
-        <A e="Tesis / Fabrika">
-          <select name="tesis" defaultValue={duzenlenen?.tesis ?? ""} className={gir + " w-full"}>
-            <option value="">—</option>
-            {tesisler.map((t) => <option key={t.id} value={t.ad}>{t.ad}</option>)}
-          </select>
-        </A>
-        <A e="Üretim hattı">
-          <select name="hat" defaultValue={duzenlenen?.hat ?? ""} className={gir + " w-full"}>
-            <option value="">—</option>
-            {hatlar.map((t) => <option key={t.id} value={t.ad}>{t.ad}</option>)}
-          </select>
-        </A>
-        <A e="Vardiya">
-          <select name="vardiya" defaultValue={duzenlenen?.vardiya ?? ""} className={gir + " w-full"}>
-            <option value="">—</option>
-            {vardiyalar.map((t) => <option key={t.id} value={t.ad}>{t.ad}</option>)}
-          </select>
         </A>
       </div>
 
@@ -761,24 +779,35 @@ function TopluAktarma({ urunler }: { urunler: Urun[] }) {
 
 function Dagilim({ baslik, veri, limit = 10 }: { baslik: string; veri: Kirilim[]; limit?: number }) {
   const satirlar = veri.slice(0, limit);
-  const enBuyuk = satirlar[0]?.kg || 1;
   if (!satirlar.length) return null;
+
+  // Çubuk uzunluğu her satırın kendi biriminde ölçülüyor: kilogramlı ve
+  // adetli satırlar aynı ölçekte karşılaştırılamaz.
+  const enBuyukKg = Math.max(1, ...satirlar.map((s) => s.kg));
+  const enBuyukAdet = Math.max(1, ...satirlar.map((s) => s.adet));
 
   return (
     <div className={kart + " p-4"}>
       <h3 className="text-sm font-semibold mb-3">{baslik}</h3>
       <ul className="space-y-1.5">
-        {satirlar.map((s) => (
-          <li key={s.anahtar} className="text-sm">
-            <div className="flex justify-between gap-2 mb-0.5">
-              <span className="truncate min-w-0">{s.anahtar}</span>
-              <span className="text-neutral-500 shrink-0">{kgYaz(s.kg)}</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
-              <div className="h-full bg-neutral-900 dark:bg-neutral-100" style={{ width: `${(s.kg / enBuyuk) * 100}%` }} />
-            </div>
-          </li>
-        ))}
+        {satirlar.map((s) => {
+          const adetliMi = s.kg === 0 && s.adet > 0;
+          const oran = adetliMi ? s.adet / enBuyukAdet : s.kg / enBuyukKg;
+          return (
+            <li key={s.anahtar} className="text-sm">
+              <div className="flex justify-between gap-2 mb-0.5">
+                <span className="truncate min-w-0">{s.anahtar}</span>
+                <span className="text-neutral-500 shrink-0">{miktarYaz(s)}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+                <div
+                  className={adetliMi ? "h-full bg-neutral-400" : "h-full bg-neutral-900 dark:bg-neutral-100"}
+                  style={{ width: `${oran * 100}%` }}
+                />
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
