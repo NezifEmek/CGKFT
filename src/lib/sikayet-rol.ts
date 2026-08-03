@@ -141,7 +141,31 @@ export function yetkiCoz(sikayetRolu: string | null | undefined, genelRol: strin
 /** Kapatma sayılan durumlar — yetki kontrolü buradan. */
 export const KAPATMA_DURUMLARI = ["cozuldu", "kapatildi", "iptal"] as const;
 
-export function durumIcinYetkiVar(y: RolYetkisi, hedefDurum: string): boolean {
-  if ((KAPATMA_DURUMLARI as readonly string[]).includes(hedefDurum)) return y.kapatir;
-  return y.durumDegistirir;
+/**
+ * Bu kişi şikayeti bu duruma taşıyabilir mi?
+ *
+ * `atanmisMi`: kişi bu şikayete GÖREVLİ olarak atanmış mı.
+ *
+ * Görevli olan kişi, rolü ne olursa olsun kaydı kapatabilir. Nezif'in
+ * kararı: "şikayetler de birine atanmalı, o görev olarak görmeli ve
+ * kapamalı."
+ *
+ * Önceki kurgu kapatmayı role bağlıyordu; çağrı merkezi ve franchise
+ * kapatamıyordu. Mantığı şuydu: kaydı karşılayan kişi işi çözen taraf
+ * olmayabilir. Ama bu, işi üstlenen kişiyi kendi görevini kapatamaz hâle
+ * getiriyordu — görev mantığıyla çelişiyor. Atama artık bilinçli bir
+ * eylem olduğu için (kimin üstlendiği belli), kapatma yetkisi de onunla
+ * birlikte geliyor.
+ *
+ * Atanmamış kişiler için eski kural aynen duruyor.
+ */
+export function durumIcinYetkiVar(
+  y: RolYetkisi,
+  hedefDurum: string,
+  atanmisMi = false,
+): boolean {
+  if ((KAPATMA_DURUMLARI as readonly string[]).includes(hedefDurum)) {
+    return y.kapatir || atanmisMi;
+  }
+  return y.durumDegistirir || atanmisMi;
 }

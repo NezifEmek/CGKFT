@@ -95,6 +95,35 @@ export async function sikayetKaydet(_o: Sonuc | null, formData: FormData): Promi
     };
   }
 
+  // ── Görevli ──────────────────────────────────────────────────────────
+  // Kayıt açılırken atanabilsin. Önceden atama yalnızca kaydın kartından
+  // yapılabiliyordu ve pratikte hiç yapılmıyordu: canlıda 2 şikayetin
+  // ikisi de "yeni" durumda, atama sayısı 0'dı. Şikayet bir GÖREV olarak
+  // ele alınacaksa sahibi ilk anda belli olmalı.
+  const gorevliId = m(formData, "gorevli_id");
+  let gorevliNotu = "";
+
+  if (gorevliId && data?.id && y.atar) {
+    const { error: atamaHata } = await supabase
+      .from("sikayet_atamalari")
+      .insert({ sikayet_id: data.id, profil_id: gorevliId, atayan_id: profile.id });
+
+    if (atamaHata) {
+      gorevliNotu = ". Görevli atanamadı: " + atamaHata.message;
+    } else {
+      gorevliNotu = ", görevli atandı";
+      // Kayıt artık birinin üstünde — durumu "atandi"ya taşı ki listede
+      // ve panelde "sahipsiz" görünmesin. Trigger geçmişe kendisi yazar.
+      await supabase
+        .from("sikayetler")
+        .update({ durum: "atandi", guncelleyen_id: profile.id })
+        .eq("id", data.id)
+        .eq("durum", "yeni");
+    }
+  } else if (gorevliId && !y.atar) {
+    gorevliNotu = ". Görevlendirme yetkiniz olmadığı için görevli atanmadı";
+  }
+
   // ── Görseller ────────────────────────────────────────────────────────
   // Aynı formda gönderiliyor: kullanıcı kaydı açarken fotoğrafı da
   // ekleyebilsin. Önceden "kaydettikten sonra kartından ekleyin" deniyordu
@@ -120,7 +149,7 @@ export async function sikayetKaydet(_o: Sonuc | null, formData: FormData): Promi
 
   revalidatePath(YOL);
   return {
-    ok: (id ? "Şikayet güncellendi" : "Şikayet kaydedildi") + ekNotu,
+    ok: (id ? "Şikayet güncellendi" : "Şikayet kaydedildi") + gorevliNotu + ekNotu,
     yeniId: id ? undefined : data?.id,
   };
 }
@@ -133,10 +162,22 @@ export async function durumDegistir(_o: Sonuc | null, formData: FormData): Promi
   if (!id) return { hata: "Şikayet seçili değil." };
   if (!(DURUMLAR as readonly string[]).includes(durum)) return { hata: "Geçersiz durum." };
 
-  if (!durumIcinYetkiVar(y, durum)) {
+  const supabase = await createClient();
+
+  // Görevli olan kişi kendi işini kapatabilir — rolü ne olursa olsun.
+  // Ekran da yetkiyi böyle gösteriyor; sunucu ayrıca denetliyor.
+  const { data: atamam } = await supabase
+    .from("sikayet_atamalari")
+    .select("profil_id")
+    .eq("sikayet_id", id)
+    .eq("profil_id", profile.id)
+    .maybeSingle<{ profil_id: string }>();
+  const atanmisMi = Boolean(atamam);
+
+  if (!durumIcinYetkiVar(y, durum, atanmisMi)) {
     return {
       hata: (KAPATMA_DURUMLARI as readonly string[]).includes(durum)
-        ? "Şikayeti kapatma yetkiniz yok. Kapatma kararını Kalite, Operasyon, Bölge Müdürü ya da Yönetim verir."
+        ? "Şikayeti kapatma yetkiniz yok. Kapatabilmek için ya bu kayda görevli atanmış olmalısınız ya da Kalite / Operasyon / Bölge Müdürü / Yönetim rolünde olmalısınız."
         : "Şikayetin durumunu değiştirme yetkiniz yok.",
     };
   }
@@ -150,7 +191,6 @@ export async function durumDegistir(_o: Sonuc | null, formData: FormData): Promi
     return { hata: "Çözüm notu yazmadan bu duruma geçilemez." };
   }
 
-  const supabase = await createClient();
   const guncelleme: Record<string, unknown> = {
     durum,
     guncelleyen_id: profile.id,

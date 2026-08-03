@@ -385,7 +385,20 @@ export function SikayetArayuz({
             <textarea name="aciklama" rows={3} required defaultValue={duzenlenen?.aciklama ?? ""} className={gir + " w-full"} />
           </Alan>
 
-          <div className="grid sm:grid-cols-2 gap-2">
+          <div className="grid sm:grid-cols-3 gap-2">
+            {/* Görevli kayıt açılırken seçilsin: şikayet bir GÖREV ve
+                sahibi ilk anda belli olmalı. Önceden atama yalnızca kaydın
+                kartından yapılabiliyordu, pratikte hiç yapılmıyordu. */}
+            {yetki.atar && !duzenlenen && (
+              <Alan e="Görevli (kim takip edecek)">
+                <select name="gorevli_id" defaultValue="" className={gir + " w-full"}>
+                  <option value="">— sonra atanacak —</option>
+                  {kisiler.map((k) => (
+                    <option key={k.id} value={k.id}>{k.ad_soyad}</option>
+                  ))}
+                </select>
+              </Alan>
+            )}
             <Alan e="Son çözüm tarihi (SLA hedefi)">
               <input name="son_cozum_tarihi" type="date" defaultValue={duzenlenen?.son_cozum_tarihi ?? ""} className={gir + " w-full"} />
             </Alan>
@@ -715,7 +728,7 @@ function Trend({ veri }: { veri: { ay: string; acilan: number; kapanan: number }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function SikayetKarti({
-  s, hareketler, ekler, atananlar, kisiler, kisiAdlari, subeAdlari, bugun, yetki,
+  s, hareketler, ekler, atananlar, kisiler, kisiAdlari, subeAdlari, bugun, benId, yetki,
   kapat, duzenle, eylemler,
 }: {
   s: Sikayet;
@@ -733,6 +746,8 @@ function SikayetKarti({
   eylemler: Record<string, any>;
 }) {
   const { a2, p2, a3, p3, a4, p4, a5, p5 } = eylemler;
+  // Bu kayıt bana atandıysa rolüm ne olursa olsun kapatabilirim.
+  const banaAtanmis = atananlar.includes(benId);
   const sure = cozumSuresi(s);
   const gecik = gecikmisMi(s, bugun);
   const sirali = [...hareketler].sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -843,13 +858,22 @@ function SikayetKarti({
             )}
           </div>
 
-          {/* Durum — yalnızca durum ilerletme ya da kapatma yetkisi olana */}
-          {(yetki.durumDegistirir || yetki.kapatir) && (
+          {/* Durum — yetki ya rolden ya da bu kayda GÖREVLİ olmaktan gelir.
+              Görevli kişi kendi işini kapatabilmeli (Nezif: "o görev olarak
+              görmeli ve kapamalı"). */}
+          {(yetki.durumDegistirir || yetki.kapatir || banaAtanmis) && (
             <form action={a2} className="space-y-2 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 p-3">
               <input type="hidden" name="sikayet_id" value={s.id} />
-              <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">Durum değiştir</h4>
+              <h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wide">
+                Durum değiştir
+                {banaAtanmis && !yetki.kapatir && (
+                  <span className="ml-1 normal-case font-normal text-neutral-400">
+                    · bu kayıt size atandığı için kapatabilirsiniz
+                  </span>
+                )}
+              </h4>
               <select name="durum" defaultValue={s.durum} className={gir + " w-full"}>
-                {DURUMLAR.filter((d) => durumIcinYetkiVar(yetki, d)).map((d) => (
+                {DURUMLAR.filter((d) => durumIcinYetkiVar(yetki, d, banaAtanmis)).map((d) => (
                   <option key={d} value={d}>{DURUM_ETIKET[d]}</option>
                 ))}
               </select>
