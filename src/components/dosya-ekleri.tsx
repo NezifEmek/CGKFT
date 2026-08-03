@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { dosyaYukle, dosyaSil, dosyaBaglantisi } from "@/app/(app)/dosya-actions";
-import { boyutYaz, simge, AZAMI_BOYUT, type Dosya } from "@/lib/dosya";
+import { useActionState, useEffect, useState } from "react";
+import {
+  dosyaYukle, dosyaSil, dosyaBaglantisi, dosyaBaglantilari,
+} from "@/app/(app)/dosya-actions";
+import { boyutYaz, simge, gorselMi, AZAMI_BOYUT, type Dosya } from "@/lib/dosya";
 
 const btnSade = "yazdirma-gizle " +
   "rounded-md border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 text-sm disabled:opacity-60";
@@ -30,6 +32,37 @@ export function DosyaEkleri({
   const [acmaHatasi, setAcmaHatasi] = useState<string | null>(null);
   const durum = d1 ?? d2;
 
+  // ── Görsel önizlemeleri ────────────────────────────────────────────
+  // Kova özel; her küçük resim için imzalı bağlantı gerekiyor. Tek
+  // çağrıda toplu alınıyor, yoksa on ek = on gidiş-dönüş olurdu.
+  // Bağlantılar 5 dakikada doluyor; sayfa açık kalırsa resimler kırılır,
+  // bu yüzden süre dolmadan bir kez yenileniyor.
+  const gorseller = dosyalar.filter((d) => gorselMi(d.ad, d.mime));
+  const gorselAnahtari = gorseller.map((g) => g.id).join(",");
+  const [onizleme, setOnizleme] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    // Görsel yoksa hiçbir şey yapılmıyor. Eski bağlantıları temizlemeye de
+    // gerek yok: onizleme yalnızca listedeki görseller için okunuyor,
+    // artık olmayan kaydın bağlantısı ekrana hiç girmiyor.
+    if (!gorselAnahtari) return;
+
+    let gecerli = true;
+    const idler = gorselAnahtari.split(",");
+
+    async function getir() {
+      const sonuc = await dosyaBaglantilari(idler);
+      if (gecerli && sonuc.url) setOnizleme(sonuc.url);
+    }
+    getir();
+    // Bağlantı 300 sn geçerli — 4 dakikada bir tazeleniyor.
+    const zamanlayici = setInterval(getir, 240_000);
+    return () => {
+      gecerli = false;
+      clearInterval(zamanlayici);
+    };
+  }, [gorselAnahtari]);
+
   async function ac(id: string) {
     setAciliyor(id);
     setAcmaHatasi(null);
@@ -48,6 +81,41 @@ export function DosyaEkleri({
         {baslik}
         {dosyalar.length > 0 && <span className="ml-1 text-neutral-400">({dosyalar.length})</span>}
       </h4>
+
+      {/* Görsel şeridi — dosya adına tıklamadan içeriği görünsün.
+          Şikayet eklerinin çoğu fotoğraf; ad listesi hiçbir şey anlatmıyordu. */}
+      {gorseller.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {gorseller.map((g) => {
+            const url = onizleme[g.id];
+            return (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => ac(g.id)}
+                title={`${g.ad} — büyütmek için tıklayın`}
+                className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 hover:border-neutral-400 dark:hover:border-neutral-500"
+              >
+                {url ? (
+                  // next/image kullanılmıyor: kaynak imzalı ve kısa ömürlü,
+                  // eniyileyiciye verilmesi anlamsız.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={url}
+                    alt={g.ad}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center text-2xl">
+                    🖼️
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {dosyalar.length > 0 && (
         <ul className="space-y-1 mb-2">
@@ -90,6 +158,7 @@ export function DosyaEkleri({
             type="file"
             name="dosya"
             required
+            multiple
             accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.gif,.doc,.docx,.xls,.xlsx,.txt,.csv"
             className="text-sm max-w-full"
           />
@@ -105,8 +174,9 @@ export function DosyaEkleri({
 
       {duzenlenebilir && (
         <p className="text-[11px] text-neutral-400 mt-1">
-          PDF, resim, Word, Excel ve metin dosyaları · en fazla {AZAMI_BOYUT / 1048576} MB.
-          Dosyalar özel alanda tutulur, bağlantıları 5 dakika geçerlidir.
+          PDF, resim, Word, Excel ve metin dosyaları · dosya başına en fazla{" "}
+          {AZAMI_BOYUT / 1048576} MB. <b>Birden fazla dosya seçebilirsiniz.</b> Dosyalar
+          özel alanda tutulur, bağlantıları 5 dakika geçerlidir.
         </p>
       )}
 

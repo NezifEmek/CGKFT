@@ -76,9 +76,28 @@ export function boyutYaz(bayt: number | null | undefined): string {
   return `${(bayt / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * Dosya bir görsel mi?
+ *
+ * MIME'a tek başına güvenilmiyor: telefondan gelen bazı dosyalarda tür
+ * boş geliyor ya da "application/octet-stream" oluyor. Uzantı da bakılıyor.
+ * HEIC bilerek listede: iPhone fotoğrafları bu türde geliyor — tarayıcı
+ * çoğu zaman gösteremese de dosya listesinde görsel sayılması doğru.
+ */
+export function gorselMi(dosyaAdi: string, mime: string): boolean {
+  if (mime.startsWith("image/")) return true;
+  return ["jpg", "jpeg", "png", "webp", "heic", "gif"].includes(uzanti(dosyaAdi));
+}
+
+/** Tarayıcıda gösterilebilen görsel türü (HEIC hariç — çoğu tarayıcı açamaz). */
+export function onizlenebilirGorselMi(dosyaAdi: string, mime: string): boolean {
+  if (!gorselMi(dosyaAdi, mime)) return false;
+  return uzanti(dosyaAdi) !== "heic" && mime !== "image/heic";
+}
+
 export function simge(dosyaAdi: string, mime: string): string {
   const u = uzanti(dosyaAdi);
-  if (mime.startsWith("image/") || ["jpg", "jpeg", "png", "webp", "heic", "gif"].includes(u)) return "🖼️";
+  if (gorselMi(dosyaAdi, mime)) return "🖼️";
   if (u === "pdf") return "📕";
   if (["doc", "docx"].includes(u)) return "📘";
   if (["xls", "xlsx", "csv"].includes(u)) return "📗";

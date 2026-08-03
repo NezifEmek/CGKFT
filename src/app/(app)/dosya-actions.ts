@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireProfile } from "@/lib/auth";
-import { KOVA, AZAMI_BOYUT, turIzinliMi, yolUret, type Dosya } from "@/lib/dosya";
+import { KOVA, type Dosya } from "@/lib/dosya";
+import { dosyalariKaydet, formdanDosyalar } from "@/lib/dosya-kaydet";
 
 type Sonuc = { hata?: string; ok?: string };
 
@@ -36,47 +37,64 @@ export async function dosyaYukle(_o: Sonuc | null, formData: FormData): Promise<
   if (!(KAPSAMLAR as readonly string[]).includes(kapsam)) return { hata: "Geçersiz dosya kapsamı." };
   if (!kayitId) return { hata: "İlgili kayıt seçili değil." };
 
-  const dosya = formData.get("dosya");
-  if (!(dosya instanceof File) || !dosya.size) return { hata: "Dosya seçilmedi." };
-
-  if (dosya.size > AZAMI_BOYUT) {
-    return { hata: `Dosya çok büyük (${(dosya.size / 1048576).toFixed(1)} MB). Sınır 25 MB.` };
-  }
-  if (!turIzinliMi(dosya.name, dosya.type)) {
-    return { hata: `"${dosya.name}" türü kabul edilmiyor. PDF, resim, Word, Excel ve metin dosyaları yüklenebilir.` };
-  }
-
-  const yol = yolUret(kapsam, kayitId, dosya.name);
-  const admin = createAdminClient();
-
-  const { error: yuklemeHata } = await admin.storage
-    .from(KOVA)
-    .upload(yol, dosya, { contentType: dosya.type || "application/octet-stream", upsert: false });
-
-  if (yuklemeHata) {
-    return { hata: tabloHatasi(yuklemeHata.message) ?? "Yüklenemedi: " + yuklemeHata.message };
-  }
+  // Tek alandan birden çok dosya seçilebiliyor (telefondan çoklu fotoğraf).
+  const dosyalar = formdanDosyalar(formData.getAll("dosya"));
+  if (!dosyalar.length) return { hata: "Dosya seçilmedi." };
 
   const supabase = await createClient();
-  const { error: kayitHata } = await supabase.from("dosyalar").insert({
+  const { yuklenen, hatalar } = await dosyalariKaydet(supabase, {
     kapsam,
-    kayit_id: kayitId,
-    yol,
-    ad: dosya.name,
-    boyut: dosya.size,
-    mime: dosya.type || "",
-    aciklama: String(formData.get("aciklama") ?? "").trim(),
-    yukleyen_id: profile.id,
+    kayitId,
+    dosyalar,
+    yukleyenId: profile.id,
   });
 
-  if (kayitHata) {
-    // Kayıt yazılamadıysa yüklenen nesneyi geri al.
-    await admin.storage.from(KOVA).remove([yol]);
-    return { hata: tabloHatasi(kayitHata.message) ?? "Kaydedilemedi: " + kayitHata.message };
-  }
-
   revalidatePath("/", "layout");
-  return { ok: `${dosya.name} yüklendi` };
+
+  if (!yuklenen) return { hata: hatalar[0] ?? "Yüklenemedi." };
+  return {
+    ok:
+      `${yuklenen} dosya yüklendi` +
+      (hatalar.length ? ` · ${hatalar.length} tanesi eklenemedi: ${hatalar[0]}` : ""),
+  };
+}
+
+/**
+ * Birden çok dosya için tek seferde imzalı bağlantı üretir.
+ *
+ * Görsel önizlemeleri için var: her küçük resim ayrı ayrı bağlantı
+ * isteseydi bir kayıtta on ayrı gidiş-dönüş olurdu. Yetki denetimi
+ * değişmiyor — RLS'in gösterdiği kayıtlar için bağlantı üretiliyor.
+ */
+export async function dosyaBaglantilari(
+  dosyaIdleri: string[],
+): Promise<{ url: Record<string, string>; hata?: string }> {
+  await requireProfile();
+  const idler = dosyaIdleri.filter(Boolean).slice(0, 60);
+  if (!idler.length) return { url: {} };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("dosyalar")
+    .select("id, yol")
+    .in("id", idler)
+    .returns<{ id: string; yol: string }[]>();
+
+  if (error) return { url: {}, hata: tabloHatasi(error.message) ?? error.message };
+  if (!data?.length) return { url: {} };
+
+  const admin = createAdminClient();
+  const { data: imzalar, error: imzaHata } = await admin.storage
+    .from(KOVA)
+    .createSignedUrls(data.map((d) => d.yol), 300);
+
+  if (imzaHata) return { url: {}, hata: "Bağlantı üretilemedi: " + imzaHata.message };
+
+  const url: Record<string, string> = {};
+  imzalar?.forEach((imza, i) => {
+    if (imza.signedUrl && data[i]) url[data[i].id] = imza.signedUrl;
+  });
+  return { url };
 }
 
 /**

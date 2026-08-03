@@ -8,8 +8,10 @@ import {
   DEPARTMANLAR, HAREKET_TURLERI,
 } from "@/lib/sikayet";
 import { yetkiCoz, durumIcinYetkiVar, KAPATMA_DURUMLARI } from "@/lib/sikayet-rol";
+import { dosyalariKaydet, formdanDosyalar } from "@/lib/dosya-kaydet";
 
-type Sonuc = { hata?: string; ok?: string };
+/** yeniId: yeni açılan kaydın kimliği — ekran onu açıp ek eklemeye yönlendirir. */
+type Sonuc = { hata?: string; ok?: string; yeniId?: string };
 const YOL = "/sikayetler";
 
 const m = (f: FormData, a: string) => String(f.get(a) ?? "").trim();
@@ -73,8 +75,34 @@ export async function sikayetKaydet(_o: Sonuc | null, formData: FormData): Promi
     return { hata: tabloHatasi(error.message) ?? ((id ? "Güncellenemedi: " : "Kaydedilemedi: ") + error.message) };
   }
 
+  // ── Görseller ────────────────────────────────────────────────────────
+  // Aynı formda gönderiliyor: kullanıcı kaydı açarken fotoğrafı da
+  // ekleyebilsin. Önceden "kaydettikten sonra kartından ekleyin" deniyordu
+  // ve kimse ikinci adımı yapmıyordu.
+  //
+  // Şikayet kaydı ASIL iş: görsel yüklenemese bile kayıt geçerli sayılıyor,
+  // sonuç mesajında eksik açıkça söyleniyor. Tersi olsaydı çözülmüş bir
+  // şikayet, fotoğrafı büyük diye hiç kaydedilmezdi.
+  const kayitId = data?.id ?? id;
+  const gorseller = formdanDosyalar(formData.getAll("gorseller"));
+  let ekNotu = "";
+
+  if (gorseller.length && kayitId) {
+    const { yuklenen, hatalar } = await dosyalariKaydet(supabase, {
+      kapsam: "sikayet",
+      kayitId,
+      dosyalar: gorseller,
+      yukleyenId: profile.id,
+    });
+    if (yuklenen) ekNotu += `, ${yuklenen} görsel eklendi`;
+    if (hatalar.length) ekNotu += `. ${hatalar.length} görsel eklenemedi: ${hatalar[0]}`;
+  }
+
   revalidatePath(YOL);
-  return { ok: id ? "Şikayet güncellendi" : `Şikayet kaydedildi${data?.id ? "" : ""}` };
+  return {
+    ok: (id ? "Şikayet güncellendi" : "Şikayet kaydedildi") + ekNotu,
+    yeniId: id ? undefined : data?.id,
+  };
 }
 
 /** Durum değişimi. Geçmiş kaydını trigger yazar. */

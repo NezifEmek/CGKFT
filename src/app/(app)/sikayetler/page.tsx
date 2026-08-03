@@ -7,10 +7,22 @@ import type { Dosya } from "@/lib/dosya";
 import { yetkiCoz } from "@/lib/sikayet-rol";
 import { SikayetArayuz, type Hareket } from "./sikayet-arayuz";
 
+/** Günlük Üretim ekranında tanımlı ürünler — şikayetteki ürün listesi buradan. */
+interface UrunKisa {
+  id: string;
+  kod: string;
+  ad: string;
+  aktif: boolean;
+}
+
 interface SubeKisa {
   id: string;
   ad: string;
   aktif: boolean;
+  /** Şube kodu (ör. M03-003SA) — şikayette kodu yazarak seçim için */
+  kod: string | null;
+  il: string | null;
+  ilce: string | null;
 }
 
 export default async function SikayetlerSayfasi() {
@@ -18,7 +30,9 @@ export default async function SikayetlerSayfasi() {
   const supabase = await createClient();
   const bugun = new Date().toISOString().slice(0, 10);
 
-  const [sikayetSonuc, hareketler, atamalar, dosyalar, subeler, { data: profiller }] = await Promise.all([
+  const [
+    sikayetSonuc, hareketler, atamalar, dosyalar, subeler, { data: profiller }, urunler,
+  ] = await Promise.all([
     sonuclaGetir<Sikayet>(() =>
       tumSatirlariGetir<Sikayet>((f, t) =>
         supabase
@@ -49,9 +63,20 @@ export default async function SikayetlerSayfasi() {
         .returns<Dosya[]>(),
     ).catch(() => [] as Dosya[]),
     tumSatirlariGetir<SubeKisa>((f, t) =>
-      supabase.from("subeler").select("id, ad, aktif").range(f, t).returns<SubeKisa[]>(),
+      supabase.from("subeler").select("id, ad, aktif, kod, il, ilce").range(f, t).returns<SubeKisa[]>(),
     ),
     supabase.from("profiles").select("id, ad_soyad").returns<Profile[]>(),
+    // Şikayetteki "Ürün" alanı artık serbest metin değil, Günlük Üretim
+    // ekranında tanımlı ürünlerden seçiliyor (Nezif'in isteği). Tablo yoksa
+    // ya da hiç ürün tanımlanmamışsa ekran serbest metne düşer.
+    tumSatirlariGetir<UrunKisa>((f, t) =>
+      supabase
+        .from("uretim_urunleri")
+        .select("id, kod, ad, aktif")
+        .order("ad")
+        .range(f, t)
+        .returns<UrunKisa[]>(),
+    ).catch(() => [] as UrunKisa[]),
   ]);
 
   // Şikayet yetkileri kişinin şikayet rolünden geliyor (0016); rol boşsa
@@ -74,13 +99,25 @@ export default async function SikayetlerSayfasi() {
         hareketler={hareketler}
         atamalar={atamalar}
         dosyalar={dosyalar}
-        subeler={subeler
-          .filter((s) => s.aktif !== false)
-          .map((s) => ({ id: s.id, ad: s.ad }))
-          .sort((a, b) => a.ad.localeCompare(b.ad, "tr"))}
+        // Kapalı şubeler DE gönderiliyor: eski bir şikayet kapanmış şubeye
+        // bağlıysa kaydı açtığınızda şube alanı boş görünmemeli. Seçici
+        // kapalı olanı "(kapalı şube)" diye işaretler. Açıklar üstte.
+        subeler={[...subeler].sort(
+          (a, b) =>
+            Number(b.aktif !== false) - Number(a.aktif !== false) ||
+            (a.kod ?? "").localeCompare(b.kod ?? "", "tr") ||
+            a.ad.localeCompare(b.ad, "tr"),
+        )}
         kisiler={(profiller ?? [])
           .map((p) => ({ id: p.id, ad_soyad: p.ad_soyad || "(adsız)" }))
           .sort((a, b) => a.ad_soyad.localeCompare(b.ad_soyad, "tr"))}
+        // Pasif ürünler de listede: eski şikayet artık üretilmeyen bir ürüne
+        // aitse adı kaybolmasın. Aktifler üstte.
+        urunler={[...urunler].sort(
+          (a, b) =>
+            Number(b.aktif !== false) - Number(a.aktif !== false) ||
+            a.ad.localeCompare(b.ad, "tr"),
+        )}
         benId={profile.id}
         yetki={yetki}
         bugun={bugun}

@@ -13,6 +13,7 @@ import {
 } from "@/lib/sikayet";
 import type { Dosya } from "@/lib/dosya";
 import { DosyaEkleri } from "@/components/dosya-ekleri";
+import { SubeSecici, subeEtiketi, type SubeSecim } from "@/components/sube-secici";
 import { durumIcinYetkiVar, type RolYetkisi } from "@/lib/sikayet-rol";
 import { YazdirDugmesi } from "@/components/yazdir-dugmesi";
 
@@ -44,14 +45,81 @@ function tarihYaz(t: string | null | undefined): string {
   return g && a && y ? `${g}.${a}.${y}` : t;
 }
 
+export interface UrunKisa {
+  id: string;
+  kod: string;
+  ad: string;
+  aktif: boolean;
+}
+
+/**
+ * Şikayetin ürünü — Günlük Üretim'de tanımlı ürünlerden seçilir.
+ *
+ * Nezif'in isteği: "ürün bölümüne manuel giriş olmasın listeden ürün
+ * seçilsin. ürünler de günlük üretim sayfasına tanımlı ürünlerden gelsin."
+ *
+ * Veritabanında ürünün ADI saklanıyor, kimliği değil. Böylece ürün tanımı
+ * silinse bile eski şikayetin hangi ürüne ait olduğu okunabilir kalıyor —
+ * şikayet kaydı ürün tablosundan uzun ömürlü.
+ *
+ * İki kaçış yolu var, ikisi de bilerek:
+ *  - Hiç ürün tanımlanmamışsa serbest metne düşer, yoksa alan kullanılamaz
+ *    hale gelirdi.
+ *  - Eski kayıtta listede olmayan bir metin varsa o değer listeye eklenir,
+ *    yoksa kaydı açıp kapatmak ürünü sessizce silerdi.
+ */
+function UrunAlani({
+  urunler, mevcut, gir,
+}: {
+  urunler: UrunKisa[];
+  mevcut: string;
+  gir: string;
+}) {
+  if (!urunler.length) {
+    return (
+      <label className="block">
+        <span className="block text-xs text-neutral-500 mb-1">Ürün / Hizmet</span>
+        <input name="urun" defaultValue={mevcut} className={gir + " w-full"} />
+        <span className="block text-[11px] text-amber-600 mt-0.5">
+          Günlük Üretim ekranında tanımlı ürün yok — şimdilik elle yazın.
+        </span>
+      </label>
+    );
+  }
+
+  const listede = urunler.some((u) => u.ad === mevcut);
+  return (
+    <label className="block">
+      <span className="block text-xs text-neutral-500 mb-1">Ürün / Hizmet</span>
+      <select name="urun" defaultValue={mevcut} className={gir + " w-full"}>
+        <option value="">— ürün belirtilmedi —</option>
+        {urunler.map((u) => (
+          <option key={u.id} value={u.ad}>
+            {u.ad}
+            {u.aktif === false ? " (pasif)" : ""}
+          </option>
+        ))}
+        {/* Eski serbest metin — listede yoksa korunuyor */}
+        {mevcut && !listede && <option value={mevcut}>{mevcut} (eski kayıt)</option>}
+      </select>
+      <span className="block text-[11px] text-neutral-400 mt-0.5">
+        Liste, Günlük Üretim ekranındaki ürün tanımlarından gelir.
+      </span>
+    </label>
+  );
+}
+
 export function SikayetArayuz({
-  sikayetler, hareketler, atamalar, dosyalar, subeler, kisiler, benId, yetki, bugun, tabloYok,
+  sikayetler, hareketler, atamalar, dosyalar, subeler, urunler, kisiler,
+  benId, yetki, bugun, tabloYok,
 }: {
   sikayetler: Sikayet[];
   hareketler: Hareket[];
   atamalar: { sikayet_id: string; profil_id: string }[];
   dosyalar: Dosya[];
-  subeler: { id: string; ad: string }[];
+  subeler: SubeSecim[];
+  /** Günlük Üretim ekranında tanımlı ürünler */
+  urunler: UrunKisa[];
   kisiler: { id: string; ad_soyad: string }[];
   benId: string;
   yetki: RolYetkisi;
@@ -82,7 +150,24 @@ export function SikayetArayuz({
   const [d5, a5, p5] = useActionState(sikayetSil, null);
   const durum = d1 ?? d2 ?? d3 ?? d4 ?? d5;
 
-  const subeAdlari = useMemo(() => new Map(subeler.map((s) => [s.id, s.ad])), [subeler]);
+  // Yeni kayıt açıldığında formu kapatıp o kaydın kartını göster: kullanıcı
+  // eklediği görselleri hemen görsün, gerekirse bir tane daha ekleyebilsin.
+  //
+  // Etki (useEffect) KULLANILMIYOR — durum sunucu cevabından türetiliyor.
+  // Etkiyle yapılsaydı sunucu cevabı geldikten sonra ikinci bir render
+  // gerekirdi; ayrıca "kapat" düğmesi etkiyi tekrar tetikleyip kartı
+  // yeniden açardı. `kapatilanYeni` bunu engelliyor.
+  const [kapatilanYeni, setKapatilanYeni] = useState<string | null>(null);
+  const yeniId = d1?.yeniId && d1.yeniId !== kapatilanYeni ? d1.yeniId : null;
+  const acikId = seciliId ?? yeniId;
+  const formGoster = (formAcik || Boolean(duzenlenen)) && !yeniId;
+
+  // Şube adının önüne KOD yazılıyor. Böylece listede, kanbanda, CSV'de ve
+  // arama kutusunda kod görünür/aranabilir olur — Nezif'in isteği.
+  const subeAdlari = useMemo(
+    () => new Map(subeler.map((s) => [s.id, s.kod ? `${s.kod} — ${s.ad}` : s.ad])),
+    [subeler],
+  );
   const kisiAdlari = useMemo(
     () => new Map(kisiler.map((k) => [k.id, k.ad_soyad || "(adsız)"])),
     [kisiler],
@@ -119,8 +204,8 @@ export function SikayetArayuz({
   const ozet = useMemo(() => sikayetOzeti(listelenen, bugun), [listelenen, bugun]);
   const tekrar = useMemo(() => tekrarlayanlar(listelenen, subeAdlari), [listelenen, subeAdlari]);
   const secili = useMemo(
-    () => sikayetler.find((s) => s.id === seciliId) ?? null,
-    [sikayetler, seciliId],
+    () => sikayetler.find((s) => s.id === acikId) ?? null,
+    [sikayetler, acikId],
   );
 
   function csvIndir() {
@@ -172,7 +257,7 @@ export function SikayetArayuz({
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="No, ad, telefon, ürün, açıklama ara…"
+          placeholder="No, ad, telefon, şube kodu, ürün, açıklama ara…"
           className={gir + " flex-1 min-w-48"}
         />
         <button type="button" onClick={csvIndir} className={btnSade}>⬇ Excel (CSV)</button>
@@ -183,7 +268,7 @@ export function SikayetArayuz({
             onClick={() => { setDuzenlenen(null); setFormAcik((v) => !v); }}
             className={btn}
           >
-            {formAcik && !duzenlenen ? "Vazgeç" : "＋ Şikayet kaydet"}
+            {formGoster && !duzenlenen ? "Vazgeç" : "＋ Şikayet kaydet"}
           </button>
         )}
       </div>
@@ -200,7 +285,7 @@ export function SikayetArayuz({
         </select>
         <select value={fSube} onChange={(e) => setFSube(e.target.value)} className={gir}>
           <option value="">Tüm şubeler</option>
-          {subeler.map((s) => <option key={s.id} value={s.id}>{s.ad}</option>)}
+          {subeler.map((s) => <option key={s.id} value={s.id}>{subeEtiketi(s)}</option>)}
         </select>
         <select value={fOncelik} onChange={(e) => setFOncelik(e.target.value)} className={gir}>
           <option value="">Tüm öncelikler</option>
@@ -231,7 +316,7 @@ export function SikayetArayuz({
       {durum?.hata && <p className="text-sm text-red-600">{durum.hata}</p>}
 
       {/* ── Kayıt formu ───────────────────────────────────────────── */}
-      {(formAcik || duzenlenen) && (
+      {formGoster && (
         <form key={duzenlenen?.id ?? "yeni"} action={a1} className={kart + " p-4 space-y-3"}>
           <h3 className="font-medium text-sm">
             {duzenlenen ? `${duzenlenen.sikayet_no} — düzenle` : "Yeni şikayet kaydı"}
@@ -267,13 +352,12 @@ export function SikayetArayuz({
           </div>
 
           <div className="grid sm:grid-cols-4 gap-2">
-            <Alan e="İlgili şube">
-              <select name="sube_id" defaultValue={duzenlenen?.sube_id ?? ""} className={gir + " w-full"}>
-                <option value="">— şube yok / genel —</option>
-                {subeler.map((s) => <option key={s.id} value={s.id}>{s.ad}</option>)}
-              </select>
-            </Alan>
-            <Alan e="Ürün / Hizmet"><input name="urun" defaultValue={duzenlenen?.urun ?? ""} className={gir + " w-full"} /></Alan>
+            <SubeSecici
+              subeler={subeler}
+              varsayilanId={duzenlenen?.sube_id ?? ""}
+              gir={gir}
+            />
+            <UrunAlani urunler={urunler} mevcut={duzenlenen?.urun ?? ""} gir={gir} />
             <Alan e="Kategori">
               <select name="kategori" defaultValue={duzenlenen?.kategori ?? "Diğer"} className={gir + " w-full"}>
                 {KATEGORILER.map((k) => <option key={k} value={k}>{k}</option>)}
@@ -291,20 +375,36 @@ export function SikayetArayuz({
             <textarea name="aciklama" rows={3} required defaultValue={duzenlenen?.aciklama ?? ""} className={gir + " w-full"} />
           </Alan>
 
-          <Alan e="Son çözüm tarihi (SLA hedefi)">
-            <input name="son_cozum_tarihi" type="date" defaultValue={duzenlenen?.son_cozum_tarihi ?? ""} className={gir} />
-          </Alan>
+          <div className="grid sm:grid-cols-2 gap-2">
+            <Alan e="Son çözüm tarihi (SLA hedefi)">
+              <input name="son_cozum_tarihi" type="date" defaultValue={duzenlenen?.son_cozum_tarihi ?? ""} className={gir + " w-full"} />
+            </Alan>
+            {/* Görseller aynı formda gönderiliyor — kayıt açılırken fotoğraf
+                eklenebilsin. Önceden "kaydettikten sonra kartından ekleyin"
+                deniyordu ve ikinci adım pratikte hiç yapılmıyordu. */}
+            <Alan e="Görsel / dosya ekle">
+              <input
+                type="file"
+                name="gorseller"
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.heic"
+                className={gir + " w-full text-sm"}
+              />
+            </Alan>
+          </div>
 
           <div className="flex items-center gap-2">
             <button type="submit" disabled={p1} className={btn}>
-              {duzenlenen ? "Güncelle" : "Kaydet"}
+              {p1 ? "Kaydediliyor…" : duzenlenen ? "Güncelle" : "Kaydet"}
             </button>
             <button type="button" onClick={() => { setFormAcik(false); setDuzenlenen(null); }} className={btnSade}>
               Vazgeç
             </button>
           </div>
           <p className="text-[11px] text-neutral-400">
-            Dosya ve görselleri kaydettikten sonra, kaydın kartından ekleyebilirsiniz.
+            Birden fazla görsel seçebilirsiniz; telefondan doğrudan fotoğraf da
+            çekebilirsiniz. Dosya başına en fazla 25 MB. Kaydettikten sonra kaydın
+            kartından da ekleyebilirsiniz.
           </p>
         </form>
       )}
@@ -431,8 +531,13 @@ export function SikayetArayuz({
           bugun={bugun}
           benId={benId}
           yetki={yetki}
-          kapat={() => setSeciliId(null)}
-          duzenle={() => { setDuzenlenen(secili); setSeciliId(null); setFormAcik(true); }}
+          kapat={() => { setSeciliId(null); setKapatilanYeni(secili.id); }}
+          duzenle={() => {
+            setDuzenlenen(secili);
+            setSeciliId(null);
+            setKapatilanYeni(secili.id);
+            setFormAcik(true);
+          }}
           eylemler={{ a2, p2, a3, p3, a4, p4, a5, p5 }}
         />
       )}
