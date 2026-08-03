@@ -45,6 +45,11 @@ export default async function UretimSayfasi() {
     ).catch(() => [] as SatisSatiri[]),
   ]);
 
+  // Raporlama birimi sütunları yoksa kod hepsini kilogram sayıyor. Bu SESSİZ
+  // bir geri düşüş ve 2026-08-03'te tam olarak buna takıldık: ekranda her
+  // ürün kg göründü, sebebi görünmedi. Artık açıkça yazıyor.
+  const birimSutunuYok = urunler.length > 0 && !("rapor_birimi" in urunler[0]);
+
   const yazabilir = profile.rol !== "denetmen";
   const yonetimMi = profile.rol === "admin" || profile.rol === "genel_mudur";
   // Satış rakamı yalnızca tüm şubeleri görenlerde şirket toplamına eşit.
@@ -62,6 +67,16 @@ export default async function UretimSayfasi() {
           çıkar. Birim, Ürünler sekmesinden değiştirilebilir.
         </p>
       </div>
+
+      {birimSutunuYok && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300">
+          <b>Raporlama birimleri henüz veritabanına işlenmemiş.</b> Bu yüzden aşağıda
+          her ürün <b>kilogram</b> olarak görünüyor. Düzelmesi için{" "}
+          <code className="text-xs">0021_urun_rapor_birimi.sql</code> dosyasının
+          Supabase&apos;de çalıştırılması gerekiyor — çalıştıktan sonra lavaş paket,
+          soslar koli/adet olarak görünecek.
+        </div>
+      )}
 
       <UretimArayuz
         kayitlar={kayitSonuc.veri}
