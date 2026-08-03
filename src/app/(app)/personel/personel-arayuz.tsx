@@ -305,11 +305,30 @@ export function PersonelArayuz({
                   <A e="Görev tanımı *">
                     <select name="pozisyon_id" required defaultValue="" className={gir}>
                       <option value="" disabled>— görev seçin —</option>
-                      {pozisyonlar.map((p) => (
-                        <option key={p.id} value={p.id}>{p.unvan}</option>
-                      ))}
+                      {pozisyonlar.map((p) => {
+                        // Bir göreve KAÇ KİŞİ atanmış olduğunu burada göstermek
+                        // önemli: aynı görevde birden fazla kişi olabileceği
+                        // belli olmayınca kullanıcı kişi başına ayrı görev
+                        // tanımı açıyor ve organizasyon şeması aynı kutudan
+                        // üç tane gösteriyor.
+                        const kimler = atamalar
+                          .filter((a) => a.pozisyon_id === p.id && !a.bitis)
+                          .map((a) => personeller.find((x) => x.id === a.personel_id)?.ad_soyad)
+                          .filter(Boolean);
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {p.unvan}
+                            {kimler.length ? ` — şu an: ${kimler.join(", ")}` : " — boş"}
+                          </option>
+                        );
+                      })}
                     </select>
                   </A>
+                  <p className="text-[11px] text-neutral-500 -mt-1">
+                    Aynı göreve <b>birden fazla kişi</b> atanabilir — her kişi için ayrı görev
+                    tanımı açmanız gerekmez. Örneğin üç şoför tek &quot;Sevkiyat Şoförü&quot;
+                    tanımını paylaşır.
+                  </p>
                   <div className="grid sm:grid-cols-3 gap-2">
                     <A e="Başlangıç">
                       <input name="baslangic" type="date" className={gir} />

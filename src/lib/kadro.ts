@@ -180,7 +180,8 @@ export type UyariTuru =
   | "atamasiz_personel"
   | "gorev_tanimi_bos"
   | "prim_grubu_yok"
-  | "ayrilan_hala_atanmis";
+  | "ayrilan_hala_atanmis"
+  | "ayni_adli_gorev";
 
 export interface Uyari {
   tur: UyariTuru;
@@ -198,6 +199,7 @@ const UYARI_BASLIK: Record<UyariTuru, string> = {
   gorev_tanimi_bos: "İçeriği boş görev tanımı",
   prim_grubu_yok: "Prim grubu seçilmemiş",
   ayrilan_hala_atanmis: "Ayrılmış personelin açık görevi",
+  ayni_adli_gorev: "Aynı adla birden fazla görev tanımı",
 };
 
 /**
@@ -294,6 +296,33 @@ export function kadroUyarilari(
       ayrinti: `${kisi.ad_soyad} ${kisi.ayrilis} tarihinde ayrılmış ama görevi hâlâ açık.`,
       yapilacak: "Atamanın bitiş tarihini girin; yoksa primde görünmeye devam eder.",
       agir: true,
+    });
+  }
+
+  // 7) Aynı unvanla birden fazla görev tanımı
+  //
+  // Neden uyarı: bir göreve birden fazla kişi atanabildiği belli olmayınca
+  // kişi başına ayrı tanım açılıyor. Sonuç, organizasyon şemasında aynı
+  // kutudan üç tane ve "bu görevde kimse yok" diyen yanıltıcı uyarılar.
+  const unvanSayim = new Map<string, PozisyonKisa[]>();
+  for (const p of pozisyonlar) {
+    const anahtar = p.unvan.trim().toLocaleLowerCase("tr");
+    if (!anahtar) continue;
+    if (!unvanSayim.has(anahtar)) unvanSayim.set(anahtar, []);
+    unvanSayim.get(anahtar)!.push(p);
+  }
+  for (const [, grup] of unvanSayim) {
+    if (grup.length < 2) continue;
+    const doluSayisi = grup.filter((p) =>
+      acik.some((a) => a.pozisyon_id === p.id),
+    ).length;
+    uyarilar.push({
+      tur: "ayni_adli_gorev",
+      baslik: UYARI_BASLIK.ayni_adli_gorev,
+      ayrinti: `"${grup[0].unvan}" adıyla ${grup.length} ayrı görev tanımı var (${doluSayisi} tanesinde kişi atanmış).`,
+      yapilacak:
+        "Aynı göreve birden fazla kişi atanabilir; tek tanımda birleştirip fazlalıkları silin.",
+      agir: false,
     });
   }
 
