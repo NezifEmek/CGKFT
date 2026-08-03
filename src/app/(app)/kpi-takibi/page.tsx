@@ -4,7 +4,12 @@ import { DonemSecici, donemCoz, subeleriSuz, kapananlarGoruntulensin } from "@/c
 import { tumSatirlariGetir } from "@/lib/supabase/fetch-all";
 import type { Sube, AylikSatis, Ay } from "@/types/database";
 import { gunSayisiMap, type Esik } from "@/lib/analytics";
-import { kpiKartlariHesapla, type KpiHucre, type KpiKarti } from "@/lib/kpi";
+import {
+  kpiKartlariHesapla, kpiAdAnahtari, type KpiHucre, type KpiKarti, type KpiSikayetKaynak,
+} from "@/lib/kpi";
+
+/** KPI'nın şikayet sütunu için gereken alanlar. */
+type SikayetKpi = KpiSikayetKaynak["sikayetler"][number];
 import { pozisyonlariNormalize } from "@/lib/dokuman";
 import { gorunurPozisyonlar } from "@/lib/organizasyon";
 
@@ -101,13 +106,32 @@ export default async function KpiTakibiSayfasi({
   const supabase = await createClient();
   const sp = await searchParams;
 
-  const [{ data: subeler }, satislar, { data: aylar }, { data: segmentAyar }] = await Promise.all([
+  const [
+    { data: subeler }, satislar, { data: aylar }, { data: segmentAyar },
+    sikayetler, sikayetAtamalari, { data: profiller },
+  ] = await Promise.all([
     supabase.from("subeler").select("*").returns<Sube[]>(),
     tumSatirlariGetir<AylikSatis>((from, to) =>
       supabase.from("aylik_satislar").select("*").range(from, to),
     ),
     supabase.from("aylar").select("*").returns<Ay[]>(),
     supabase.from("segment_ayarlari").select("*").eq("id", 1).single(),
+    // Şikayet SLA sütunu için (Nezif: "KPI'ı etkilemeli").
+    tumSatirlariGetir<SikayetKpi>((f, t) =>
+      supabase
+        .from("sikayetler")
+        .select("id, son_cozum_tarihi, cozuldu_at, kapatildi_at")
+        .range(f, t)
+        .returns<SikayetKpi[]>(),
+    ).catch(() => [] as SikayetKpi[]),
+    tumSatirlariGetir<{ sikayet_id: string; profil_id: string }>((f, t) =>
+      supabase
+        .from("sikayet_atamalari")
+        .select("sikayet_id, profil_id")
+        .range(f, t)
+        .returns<{ sikayet_id: string; profil_id: string }[]>(),
+    ).catch(() => [] as { sikayet_id: string; profil_id: string }[]),
+    supabase.from("profiles").select("id, ad_soyad").returns<{ id: string; ad_soyad: string }[]>(),
   ]);
 
   const gunMap = gunSayisiMap(aylar ?? []);
@@ -130,6 +154,20 @@ export default async function KpiTakibiSayfasi({
     );
   }
 
+  // Şikayet → görevli eşlemesi. Ad eşleştirmesi kütüphanede yapılıyor;
+  // burada yalnızca ham haritalar kuruluyor.
+  const gorevliler = new Map<string, string[]>();
+  for (const a of sikayetAtamalari) {
+    const liste = gorevliler.get(a.sikayet_id);
+    if (liste) liste.push(a.profil_id);
+    else gorevliler.set(a.sikayet_id, [a.profil_id]);
+  }
+  const adDanProfil = new Map<string, string>();
+  for (const p of profiller ?? []) {
+    const a = kpiAdAnahtari(p.ad_soyad || "");
+    if (a) adDanProfil.set(a, p.id);
+  }
+
   const tumKartlar = kpiKartlariHesapla(
     aktifSubeler,
     satislar,
@@ -137,6 +175,7 @@ export default async function KpiTakibiSayfasi({
     aktifAylar,
     gunMap,
     esikler,
+    { sikayetler, gorevliler, adDanProfil },
   );
 
   // Admin dışındaki kullanıcı yalnızca kendi kartını ve astlarınınkini görür.

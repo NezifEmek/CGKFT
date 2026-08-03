@@ -12,6 +12,8 @@ import {
   type GorevSatir,
   type OneriSatir,
   type PlanSatir,
+  type SikayetSatir,
+  type SikayetAtamaSatir,
 } from "@/lib/faaliyet";
 import { gorunurPozisyonlar, asciiKatla } from "@/lib/organizasyon";
 import { pozisyonlariNormalize } from "@/lib/dokuman";
@@ -55,6 +57,8 @@ export default async function HaftalikFaaliyetSayfasi({
     gorevler,
     oneriler,
     planSonuc,
+    sikayetler,
+    sikayetAtamalari,
     { data: dokData },
   ] = await Promise.all([
     supabase.from("profiles").select("id, ad_soyad, rol, pozisyon_id").returns<Profile[]>(),
@@ -117,6 +121,24 @@ export default async function HaftalikFaaliyetSayfasi({
           .returns<PlanSatir[]>(),
       ),
     ),
+    // Şikayetler faaliyete GÖREVLİ üzerinden giriyor (bkz. @/lib/faaliyet).
+    tumSatirlariGetir<SikayetSatir>((f, t) =>
+      supabase
+        .from("sikayetler")
+        .select(
+          "id, sikayet_no, kategori, durum, oncelik, sube_id, son_cozum_tarihi, " +
+            "olusturan_id, basvuru_tarihi, cozuldu_at, kapatildi_at, created_at",
+        )
+        .range(f, t)
+        .returns<SikayetSatir[]>(),
+    ).catch(() => [] as SikayetSatir[]),
+    tumSatirlariGetir<SikayetAtamaSatir>((f, t) =>
+      supabase
+        .from("sikayet_atamalari")
+        .select("sikayet_id, profil_id")
+        .range(f, t)
+        .returns<SikayetAtamaSatir[]>(),
+    ).catch(() => [] as SikayetAtamaSatir[]),
     supabase.from("dokuman_ayarlari").select("pozisyonlar").eq("id", 1).maybeSingle<{ pozisyonlar: unknown }>(),
   ]);
 
@@ -157,6 +179,8 @@ export default async function HaftalikFaaliyetSayfasi({
     oneriler,
     plan: planSonuc.veri,
     subeAdlari: new Map(subeler.map((s) => [s.id, s.ad])),
+    sikayetler,
+    sikayetAtamalari,
   };
 
   const faaliyetler = haftalikFaaliyet(hafta, kisiler, kaynak);

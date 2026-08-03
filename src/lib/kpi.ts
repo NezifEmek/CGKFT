@@ -11,6 +11,45 @@ import type { Esik } from "./analytics";
 export const IZZET = "İZZET ALTUĞ";
 export const BOLGE_YETKILILERI = ["UMUT CAN DOĞAN", "METİN BAŞOK"] as const;
 
+/** Şikayetlerin söz verilen tarihte kapanma oranı hedefi (%). */
+export const SIKAYET_SLA_HEDEFI = 90;
+
+const AY_SIRASI = [
+  "OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN",
+  "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK",
+];
+
+/**
+ * KPI kartlarındaki kişiler `subeler.merkez_yetkilisi` METNİNDEN geliyor,
+ * şikayet görevlendirmeleri ise profil kimliğinden. İkisini eşleştirmek
+ * için ad katlanıyor — faaliyet raporundaki franchise eşleştirmesinin
+ * aynısı ("Umut Can Doğan" ↔ "UMUT CAN DOĞAN").
+ */
+export function kpiAdAnahtari(s: string): string {
+  return s
+    .toLocaleUpperCase("tr")
+    .replace(/[İIıi]/g, "I")
+    .replace(/Ö/g, "O").replace(/Ü/g, "U").replace(/Ş/g, "S")
+    .replace(/Ç/g, "C").replace(/Ğ/g, "G")
+    .replace(/[^A-Z0-9]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** KPI'ya şikayet sütunu eklemek için gereken veri. */
+export interface KpiSikayetKaynak {
+  sikayetler: {
+    id: string;
+    son_cozum_tarihi: string | null;
+    cozuldu_at: string | null;
+    kapatildi_at: string | null;
+  }[];
+  /** şikayet id → görevli profil kimlikleri */
+  gorevliler: Map<string, string[]>;
+  /** katlanmış ad → profil kimliği */
+  adDanProfil: Map<string, string>;
+}
+
 export interface KpiHucre {
   ok: boolean;
   deger: string;
@@ -60,6 +99,8 @@ export function kpiKartlariHesapla(
   aylar: string[],
   gunMap: Map<string, number>,
   esikler: Esik[],
+  /** Verilmezse şikayet sütunu hiç eklenmez — eski davranış korunur. */
+  sikayetKaynak?: KpiSikayetKaynak,
 ): KpiKarti[] {
   const kgTablo = kgTablosuKur(satislar, yil);
   // 0 = en iyi segment (★); esikler min'e göre büyükten küçüğe sıralanır.
@@ -175,6 +216,59 @@ export function kpiKartlariHesapla(
     return { tam, toplam };
   }
 
+  // ── Şikayet hücresi ─────────────────────────────────────────────────────
+  //
+  // Nezif: şikayet "KPI'ı etkilemeli". Ölçü olarak SLA seçildi: kişiye
+  // atanan şikayetlerden kaçı söz verilen tarihte kapandı.
+  //
+  // Neden çözülen ADEDİ değil de ORAN: adet, şikayet sayısına bağlı. Az
+  // şikayet gelen ay düşük, çok gelen ay yüksek çıkar; ikisi de kişinin
+  // performansını anlatmaz. Oran "üstlendiğini zamanında bitirdi mi"
+  // sorusunu cevaplıyor.
+  //
+  // O ay kişiye kapanmış hiç şikayet düşmediyse hücre NULL — "hedef
+  // tutmadı" demek yanlış olurdu. Null hücreler skora da girmiyor.
+  const sikayetHucresi = (yetkiliAdi: string, ay: string): KpiHucre | null => {
+    if (!sikayetKaynak) return null;
+    const profilId = sikayetKaynak.adDanProfil.get(kpiAdAnahtari(yetkiliAdi));
+    if (!profilId) return null;
+
+    const ayNo = String(AY_SIRASI.indexOf(ay) + 1).padStart(2, "0");
+    if (ayNo === "00") return null;
+    const onEk = `${yil}-${ayNo}`;
+
+    const benim = sikayetKaynak.sikayetler.filter(
+      (s) => sikayetKaynak.gorevliler.get(s.id)?.includes(profilId),
+    );
+    // O ay KAPANAN kayıtlar: ölçüm anı kapanış tarihidir.
+    const kapananlar = benim.filter((s) => {
+      const kapanis = s.cozuldu_at ?? s.kapatildi_at;
+      return !!kapanis && kapanis.slice(0, 7) === onEk;
+    });
+    if (!kapananlar.length) return null;
+
+    // Hedefi olmayan kayıt SLA ölçümüne girmez; tarih verilmemişse
+    // "zamanında mı" sorusunun cevabı yok.
+    //
+    // Hiçbirinde tarih yoksa hücre NULL — "na: true" ile geçer saymak
+    // yanlış olurdu: o, SLA alanını boş bırakmayı ÖDÜLLENDİRİR. Null
+    // hücre skora hiç girmiyor. (Şikayet kaydında tarih boş bırakılırsa
+    // önceliğe göre kendiliğinden atanıyor, bkz. varsayilanSlaTarihi.)
+    const hedefli = kapananlar.filter((s) => !!s.son_cozum_tarihi);
+    if (!hedefli.length) return null;
+    const zamaninda = hedefli.filter((s) => {
+      const kapanis = (s.cozuldu_at ?? s.kapatildi_at)!.slice(0, 10);
+      return kapanis <= s.son_cozum_tarihi!.slice(0, 10);
+    }).length;
+    const oran = (zamaninda / hedefli.length) * 100;
+
+    return {
+      ok: oran >= SIKAYET_SLA_HEDEFI,
+      deger: `%${Math.round(oran)} (${zamaninda}/${hedefli.length})`,
+      hedef: `≥ %${SIKAYET_SLA_HEDEFI}`,
+    };
+  };
+
   const kartlar: KpiKarti[] = [];
 
   // ── İzzet Altuğ: miktar + segment yükseliş (≥1) + segment düşüş (=0) ─────
@@ -184,6 +278,7 @@ export function kpiKartlariHesapla(
       { anahtar: "miktar", etiket: "Miktar" },
       { anahtar: "yukselis", etiket: "Segment Yükseliş" },
       { anahtar: "dusus", etiket: "Segment Düşüş" },
+      ...(sikayetKaynak ? [{ anahtar: "sikayet", etiket: "Şikayet SLA" }] : []),
     ];
     const satirlar = aylar.map((ay, i) => ({
       ay,
@@ -191,6 +286,7 @@ export function kpiKartlariHesapla(
         miktar: miktarHucresi(kapsam, ay, i),
         yukselis: yukselisHucresi(kapsam, i, 1),
         dusus: dususHucresi(kapsam, i, 0),
+        ...(sikayetKaynak ? { sikayet: sikayetHucresi(IZZET, ay) } : {}),
       },
     }));
     const { tam, toplam } = skorla(satirlar, sutunlar);
@@ -213,6 +309,7 @@ export function kpiKartlariHesapla(
       { anahtar: "miktar", etiket: "Miktar" },
       { anahtar: "yukselis", etiket: "Segment Yükseliş" },
       { anahtar: "dusus", etiket: "Segment Düşüş" },
+      ...(sikayetKaynak ? [{ anahtar: "sikayet", etiket: "Şikayet SLA" }] : []),
     ];
     const satirlar = aylar.map((ay, i) => {
       const hareket = subeHareket(kapsam, i);
@@ -228,6 +325,7 @@ export function kpiKartlariHesapla(
           miktar: miktarHucresi(kapsam, ay, i),
           yukselis: yukselisHucresi(kapsam, i, 5),
           dusus: dususHucresi(kapsam, i, 1),
+          ...(sikayetKaynak ? { sikayet: sikayetHucresi(yetkili, ay) } : {}),
         },
       };
     });

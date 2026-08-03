@@ -185,6 +185,16 @@ export function FaaliyetArayuz({
                     ⚠ {k.gecikenGorevler.length} geciken
                   </span>
                 )}
+                {k.cozulenSikayetler.length > 0 && (
+                  <span className="text-xs text-neutral-500">
+                    📣 {k.cozulenSikayetler.length} şikayet çözdü
+                  </span>
+                )}
+                {k.gecikenSikayetler.length > 0 && (
+                  <span className="text-xs text-red-600 font-medium">
+                    ⚠ {k.gecikenSikayetler.length} geciken şikayet
+                  </span>
+                )}
                 {!k.toplamFaaliyet && !k.planToplam && (
                   <span className="text-xs text-neutral-400">bu hafta kayıt yok</span>
                 )}
@@ -386,6 +396,54 @@ export function FaaliyetArayuz({
                             <span className="text-neutral-400 text-[10px] shrink-0">
                               termin {tarihYaz(g.termin)}
                             </span>
+                          </li>
+                        ))}
+                      </Bolum>
+                    )}
+
+                    {k.cozulenSikayetler.length > 0 && (
+                      <Bolum baslik="Çözdüğü şikayet">
+                        {k.cozulenSikayetler.map((c) => (
+                          <li key={c.id} className="flex gap-2">
+                            <span className="text-emerald-600 shrink-0">✔</span>
+                            <span className="flex-1 min-w-0">{c.etiket}</span>
+                            <span className="text-neutral-400 text-[10px] shrink-0">{c.subeAdi}</span>
+                          </li>
+                        ))}
+                      </Bolum>
+                    )}
+
+                    {k.gecikenSikayetler.length > 0 && (
+                      <Bolum baslik="Geciken şikayet">
+                        {k.gecikenSikayetler.map((c) => (
+                          <li key={c.id} className="flex gap-2">
+                            <span className="text-red-600 shrink-0">!</span>
+                            <span className="flex-1 min-w-0">{c.etiket}</span>
+                            <span className="text-neutral-400 text-[10px] shrink-0">{c.subeAdi}</span>
+                          </li>
+                        ))}
+                      </Bolum>
+                    )}
+
+                    {/* Açık ama gecikmemiş olanlar sayı olarak yeter; tek tek
+                        listelemek raporu şişirir, aksiyon da gerektirmiyor. */}
+                    {k.acikSikayetler.length > k.gecikenSikayetler.length && (
+                      <Bolum baslik="Üstündeki açık şikayet">
+                        <li className="text-neutral-500">
+                          {k.acikSikayetler.length} kayıt
+                          {k.gecikenSikayetler.length > 0
+                            ? ` (${k.gecikenSikayetler.length} tanesi gecikmiş)`
+                            : " — süresi geçen yok"}
+                        </li>
+                      </Bolum>
+                    )}
+
+                    {k.actigiSikayetler.length > 0 && (
+                      <Bolum baslik="Açtığı şikayet kaydı">
+                        {k.actigiSikayetler.map((c) => (
+                          <li key={c.id} className="flex gap-2">
+                            <span className="shrink-0">📣</span>
+                            <span className="flex-1 min-w-0">{c.etiket}</span>
                           </li>
                         ))}
                       </Bolum>

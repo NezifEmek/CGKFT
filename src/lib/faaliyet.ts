@@ -62,6 +62,34 @@ export interface OneriSatir {
   ekleyen_id: string;
   created_at: string;
 }
+/**
+ * Şikayet — faaliyet raporuna GÖREVLİ üzerinden giriyor.
+ *
+ * Nezif: "bu hem görev olmalı, hem haftalık faaliyete girmeli, hem de
+ * KPI'ı etkilemeli."
+ *
+ * Kaydı AÇAN değil, kaydı ÜSTLENEN kişinin faaliyeti sayılıyor: çağrıyı
+ * alan kişi onlarca kayıt açabilir, işi yapan atanan kişidir. Kaydı açmak
+ * da ayrıca sayılıyor ama kendi başlığında.
+ */
+export interface SikayetSatir {
+  id: string;
+  sikayet_no: string;
+  kategori: string;
+  durum: string;
+  oncelik: string;
+  sube_id: string | null;
+  son_cozum_tarihi: string | null;
+  olusturan_id: string | null;
+  basvuru_tarihi: string;
+  cozuldu_at: string | null;
+  kapatildi_at: string | null;
+  created_at: string;
+}
+export interface SikayetAtamaSatir {
+  sikayet_id: string;
+  profil_id: string;
+}
 export interface PlanSatir {
   id: string;
   profil_id: string;
@@ -84,6 +112,21 @@ export interface FaaliyetKaynak {
   oneriler: OneriSatir[];
   plan: PlanSatir[];
   subeAdlari: Map<string, string>;
+  /** Şikayetler ve görevlendirmeleri. Verilmezse şikayet satırı üretilmez. */
+  sikayetler?: SikayetSatir[];
+  sikayetAtamalari?: SikayetAtamaSatir[];
+}
+
+/** Faaliyet raporunda gösterilen şikayet satırı. */
+export interface SikayetFaaliyet {
+  id: string;
+  etiket: string;
+  tarih: string;
+  kategori: string;
+  durum: string;
+  subeAdi: string;
+  /** SLA hedefi geçmiş mi (hafta sonu itibarıyla) */
+  gecikti: boolean;
 }
 
 export interface SubeZiyaret {
@@ -114,6 +157,15 @@ export interface KisiFaaliyet {
   /** Termini geçmiş, hâlâ açık görevler (hafta sonuna göre) */
   gecikenGorevler: GorevSatir[];
   oneriler: OneriSatir[];
+
+  /** Üstlendiği ve bu hafta çözüme/kapanışa götürdüğü şikayetler */
+  cozulenSikayetler: SikayetFaaliyet[];
+  /** Bu hafta kendisine atanmış, hâlâ açık şikayetler */
+  acikSikayetler: SikayetFaaliyet[];
+  /** Üstündeki, SLA hedefi hafta sonuna göre geçmiş açık şikayetler */
+  gecikenSikayetler: SikayetFaaliyet[];
+  /** Bu hafta kendi açtığı kayıtlar (çağrıyı karşılama) */
+  actigiSikayetler: SikayetFaaliyet[];
 
   plan: PlanSatirSonuc[];
   planToplam: number;
@@ -176,6 +228,10 @@ export function haftalikFaaliyet(
     acilanGorevler: [],
     gecikenGorevler: [],
     oneriler: [],
+    cozulenSikayetler: [],
+    acikSikayetler: [],
+    gecikenSikayetler: [],
+    actigiSikayetler: [],
     plan: [],
     planToplam: 0,
     planGerceklesen: 0,
@@ -268,6 +324,60 @@ export function haftalikFaaliyet(
     al(o.ekleyen_id)?.oneriler.push(o);
   }
 
+  // ─── Şikayetler ────────────────────────────────────────────────────────
+  // Kaydı ÜSTLENEN kişinin faaliyeti sayılıyor. Bir şikayete birden çok
+  // kişi atanabildiği için atamalar önce kişiye göre indeksleniyor.
+  if (kaynak.sikayetler?.length) {
+    const KAPALI = ["cozuldu", "kapatildi", "iptal"];
+    const gorevliler = new Map<string, string[]>(); // sikayet_id → profil id'leri
+    for (const a of kaynak.sikayetAtamalari ?? []) {
+      const liste = gorevliler.get(a.sikayet_id);
+      if (liste) liste.push(a.profil_id);
+      else gorevliler.set(a.sikayet_id, [a.profil_id]);
+    }
+
+    for (const sk of kaynak.sikayetler) {
+      const subeAdi = sk.sube_id
+        ? (kaynak.subeAdlari.get(sk.sube_id) ?? "(bilinmeyen şube)")
+        : "genel";
+      // Gecikme HAFTA SONUNA göre değerlendiriliyor; rapor geçmiş bir
+      // haftaya bakarken "bugün" ölçüsü yanıltıcı olurdu.
+      const gecikti =
+        !KAPALI.includes(sk.durum) &&
+        !!sk.son_cozum_tarihi &&
+        sk.son_cozum_tarihi.slice(0, 10) < hafta.bitis;
+
+      const yap = (tarih: string): SikayetFaaliyet => ({
+        id: sk.id,
+        etiket: `${sk.sikayet_no} · ${sk.kategori || "Şikayet"}`,
+        tarih: tarih.slice(0, 10),
+        kategori: sk.kategori,
+        durum: sk.durum,
+        subeAdi,
+        gecikti,
+      });
+
+      // Kaydı açan kişi — çağrıyı karşılama faaliyeti.
+      if (haftadaMi(sk.created_at, hafta)) {
+        al(sk.olusturan_id)?.actigiSikayetler.push(yap(sk.created_at));
+      }
+
+      const kapanis = sk.cozuldu_at ?? sk.kapatildi_at;
+      for (const profilId of gorevliler.get(sk.id) ?? []) {
+        const k = al(profilId);
+        if (!k) continue;
+
+        if (KAPALI.includes(sk.durum)) {
+          // Kapanış bu haftaysa faaliyet; daha eskiyse rapora girmez.
+          if (kapanis && haftadaMi(kapanis, hafta)) k.cozulenSikayetler.push(yap(kapanis));
+        } else {
+          k.acikSikayetler.push(yap(sk.basvuru_tarihi));
+          if (gecikti) k.gecikenSikayetler.push(yap(sk.basvuru_tarihi));
+        }
+      }
+    }
+  }
+
   // ─── Plan ve gerçekleşme ───────────────────────────────────────────────
   for (const p of kaynak.plan) {
     if (p.hafta.slice(0, 10) !== hafta.baslangic) continue;
@@ -302,12 +412,16 @@ export function haftalikFaaliyet(
       k.ziyaretler.filter((z) => !planlananSubeler.has(z.subeId)).map((z) => z.subeId),
     ).size;
 
+    // Yapılan işler sayılıyor. Açık ve geciken şikayetler BURAYA GİRMEZ:
+    // onlar yapılmış iş değil, bekleyen yük — ayrı gösteriliyorlar.
     k.toplamFaaliyet =
       k.ziyaretler.length +
       k.franchiseAramalari.length +
       k.toplantilar.length +
       k.tamamlananGorevler.length +
-      k.oneriler.length;
+      k.oneriler.length +
+      k.cozulenSikayetler.length +
+      k.actigiSikayetler.length;
   }
 
   return [...sonuc.values()].sort(
@@ -351,6 +465,18 @@ export function faaliyetMetni(hafta: Hafta, kisiler: KisiFaaliyet[]): string {
     if (k.gecikenGorevler.length) {
       s.push(`  GECİKEN GÖREV: ${k.gecikenGorevler.length}`);
       for (const g of k.gecikenGorevler) s.push(`    ! ${g.baslik} (termin ${g.termin})`);
+    }
+    if (k.cozulenSikayetler.length) {
+      s.push(`  Çözülen şikayet: ${k.cozulenSikayetler.length}`);
+      for (const c of k.cozulenSikayetler) s.push(`    ✔ ${c.etiket} (${c.subeAdi})`);
+    }
+    if (k.actigiSikayetler.length) s.push(`  Açtığı şikayet kaydı: ${k.actigiSikayetler.length}`);
+    if (k.acikSikayetler.length) {
+      s.push(`  Üstündeki açık şikayet: ${k.acikSikayetler.length}`);
+    }
+    if (k.gecikenSikayetler.length) {
+      s.push(`  GECİKEN ŞİKAYET: ${k.gecikenSikayetler.length}`);
+      for (const c of k.gecikenSikayetler) s.push(`    ! ${c.etiket} (${c.subeAdi})`);
     }
     if (k.oneriler.length) s.push(`  Öneri: ${k.oneriler.length}`);
     s.push("");

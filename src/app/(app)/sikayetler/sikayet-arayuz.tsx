@@ -9,7 +9,7 @@ import {
   KANALLAR, BASVURAN_TURLERI, KATEGORILER, DURUMLAR, ONCELIKLER, DEPARTMANLAR,
   HAREKET_TURLERI, DURUM_ETIKET, DURUM_RENK, ONCELIK_ETIKET, ONCELIK_RENK,
   HAREKET_ETIKET, HAREKET_SIMGE, sikayetOzeti, tekrarlayanlar, sikayetCsv,
-  gecikmisMi, cozumSuresi, type Sikayet,
+  gecikmisMi, cozumSuresi, SLA_GUN, type Sikayet,
 } from "@/lib/sikayet";
 import type { Dosya } from "@/lib/dosya";
 import { DosyaEkleri } from "@/components/dosya-ekleri";
@@ -401,6 +401,10 @@ export function SikayetArayuz({
             )}
             <Alan e="Son çözüm tarihi (SLA hedefi)">
               <input name="son_cozum_tarihi" type="date" defaultValue={duzenlenen?.son_cozum_tarihi ?? ""} className={gir + " w-full"} />
+              <span className="block text-[11px] text-neutral-400 mt-0.5">
+                Boş bırakırsanız önceliğe göre belirlenir: kritik {SLA_GUN.kritik} gün,
+                yüksek {SLA_GUN.yuksek}, orta {SLA_GUN.orta}, düşük {SLA_GUN.dusuk}.
+              </span>
             </Alan>
             {/* Görseller aynı formda gönderiliyor — kayıt açılırken fotoğraf
                 eklenebilsin. Önceden "kaydettikten sonra kartından ekleyin"

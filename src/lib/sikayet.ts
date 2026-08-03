@@ -55,6 +55,31 @@ export const DURUM_RENK: Record<string, string> = {
 export const KAPALI_DURUMLAR: readonly string[] = ["cozuldu", "kapatildi", "iptal"];
 
 export const ONCELIKLER = ["dusuk", "orta", "yuksek", "kritik"] as const;
+
+/**
+ * Önceliğe göre çözüm süresi hedefi (gün).
+ *
+ * Neden var: SLA tarihi boş bırakılan kayıt ölçülemiyor — KPI'da "zamanında
+ * kapandı mı" sorusunun cevabı olmuyor ve o ay hesaba hiç girmiyor. Canlıda
+ * ilk iki şikayetin ikisinde de bu alan boştu. Kullanıcıya ek bir zorunlu
+ * alan dayatmak yerine, boş bırakılırsa öncelikten türetiliyor; isteyen
+ * elle değiştirebiliyor.
+ */
+export const SLA_GUN: Record<string, number> = {
+  kritik: 1,
+  yuksek: 3,
+  orta: 7,
+  dusuk: 14,
+};
+
+/** Başvuru tarihi + önceliğin gün sayısı → "YYYY-AA-GG". */
+export function varsayilanSlaTarihi(basvuruTarihi: string, oncelik: string): string {
+  const gun = SLA_GUN[oncelik] ?? SLA_GUN.orta;
+  const d = new Date(basvuruTarihi.slice(0, 10) + "T00:00:00Z");
+  if (Number.isNaN(d.getTime())) return "";
+  d.setUTCDate(d.getUTCDate() + gun);
+  return d.toISOString().slice(0, 10);
+}
 export const ONCELIK_ETIKET: Record<string, string> = {
   dusuk: "Düşük", orta: "Orta", yuksek: "Yüksek", kritik: "Kritik",
 };

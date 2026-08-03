@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import {
   KANALLAR, BASVURAN_TURLERI, KATEGORILER, DURUMLAR, ONCELIKLER,
-  DEPARTMANLAR, HAREKET_TURLERI,
+  DEPARTMANLAR, HAREKET_TURLERI, varsayilanSlaTarihi,
 } from "@/lib/sikayet";
 import { yetkiCoz, durumIcinYetkiVar, KAPATMA_DURUMLARI } from "@/lib/sikayet-rol";
 import { dosyalariKaydet, formdanDosyalar } from "@/lib/dosya-kaydet";
@@ -58,7 +58,15 @@ export async function sikayetKaydet(_o: Sonuc | null, formData: FormData): Promi
     aciklama,
     oncelik: secim(m(formData, "oncelik"), ONCELIKLER, "orta"),
     departman: secim(m(formData, "departman"), [...DEPARTMANLAR, ""], ""),
-    son_cozum_tarihi: m(formData, "son_cozum_tarihi") || null,
+    // Boş bırakılırsa önceliğe göre türetiliyor. SLA tarihi olmayan kayıt
+    // KPI'da ölçülemiyor ve o ay hesaba hiç girmiyordu (bkz. SLA_GUN).
+    son_cozum_tarihi:
+      m(formData, "son_cozum_tarihi") ||
+      varsayilanSlaTarihi(
+        m(formData, "basvuru_tarihi") || new Date().toISOString().slice(0, 10),
+        secim(m(formData, "oncelik"), ONCELIKLER, "orta"),
+      ) ||
+      null,
     guncelleyen_id: profile.id,
     updated_at: new Date().toISOString(),
   };
