@@ -347,19 +347,24 @@ const AY_KISA_12 = [
 /**
  * Her ürün için yıllık çubuk grafik serisi üretir.
  *
- * ── Satış neden yalnızca kilogram ürününde var ───────────────────────────
- * aylik_satislar tablosunda ÜRÜN KIRILIMI YOK: şube başına aylık tek bir kg
- * değeri tutuluyor, o da çiğköfte satışı. Lavaşın ya da sosların satışı
- * sistemde hiç kayıtlı değil. Bu yüzden satış serisi yalnızca kilogram
- * raporlanan ürüne bağlanıyor; diğer grafikler yalnızca üretim gösterir ve
- * ekran bunun sebebini yazar. Uydurma bir eşleştirme yapmaktansa eksiği
- * söylemek doğru.
+ * ── İki ayrı satış kaynağı var ───────────────────────────────────────────
+ * 1) `aylik_satislar` — şube başına aylık tek bir kg. Ürün kırılımı YOK,
+ *    o rakam çiğköfte satışı. Sistemin ilk gününden beri var.
+ * 2) `urun_satislari` — ürün bazında aylık satış (0022). Lavaş, soslar
+ *    buradan geliyor.
+ *
+ * Öncelik ürün bazlı tabloda: bir ürün/ay için orada kayıt varsa o
+ * kullanılır. Yoksa ve ürün kilogram raporlanıyorsa (çiğköfte)
+ * `aylik_satislar` devreye girer. İkisi de yoksa o ay boş kalır —
+ * uydurma eşleştirme yapılmıyor.
  */
 export function urunAylikSeriler(
   urunOzetleri: UrunOzet[],
   aylik: AylikSatir[],
   satisMap: Map<string, number>,
   bugun: string,
+  /** ürün adı → ay anahtarı ("2026-07") → raporlama birimindeki satış */
+  urunSatislari: Map<string, Map<string, number>> = new Map(),
 ): UrunAylikSeri[] {
   // Grafiklerin yılı: üretim kaydı olan EN SON yıl. Üretim yoksa bugünün yılı.
   const yillar = aylik.map((a) => Number(a.ay.slice(0, 4))).filter(Number.isFinite);
@@ -367,12 +372,17 @@ export function urunAylikSeriler(
   const buAyAnahtar = bugun.slice(0, 7);
 
   return urunOzetleri.map((u) => {
-    const satisVar = u.birim === "kg";
+    const kendiSatisi = urunSatislari.get(u.ad);
+    // Kilogram raporlanan üründe aylik_satislar yedek kaynak.
+    const kgYedegiVar = u.birim === "kg";
+    const satisVar = Boolean(kendiSatisi?.size) || kgYedegiVar;
+
     const aylar = AY_KISA_12.map((kisa, i) => {
       const ay = `${yil}-${String(i + 1).padStart(2, "0")}`;
       const satir = aylik.find((a) => a.ay === ay);
       const uretim = satir?.urunler[u.ad] ?? null;
-      const satis = satisVar ? satisMap.get(ay) ?? null : null;
+      const satis =
+        kendiSatisi?.get(ay) ?? (kgYedegiVar ? satisMap.get(ay) ?? null : null);
       return { ay, kisa, uretim, satis, buAy: ay === buAyAnahtar };
     });
 
@@ -435,6 +445,8 @@ export function uretimOzeti(
   urunler: Urun[],
   bugun: string,
   satislar: SatisSatiri[] = [],
+  /** ürün adı → ay ("2026-07") → raporlama birimindeki satış (0022 tablosu) */
+  urunSatislari: Map<string, Map<string, number>> = new Map(),
 ): UretimOzet {
   const harita = urunHaritasi(urunler);
   const satisMap = satisHaritasi(satislar);
@@ -530,7 +542,9 @@ export function uretimOzeti(
     gunlukOrtalamaKg: uretimGunu ? yuvarla(toplamKg / uretimGunu) : null,
     uretimGunuSayisi: uretimGunu,
     urunOzetleri,
-    urunSerileri: urunAylikSeriler(urunOzetleri, aylikSatirlar, satisMap, bugun),
+    urunSerileri: urunAylikSeriler(
+      urunOzetleri, aylikSatirlar, satisMap, bugun, urunSatislari,
+    ),
     gruplar: kir(kayitlar, (k) => k.urun_grup),
     ambalajlar: kir(kayitlar, (k) => k.ambalaj_tipi),
     gunluk,

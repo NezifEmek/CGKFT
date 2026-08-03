@@ -3,11 +3,16 @@
 import { useActionState, useMemo, useState } from "react";
 import {
   kayitKaydet, kayitSil, urunKaydet, urunSil, topluAktar, topluKayitSil,
-  type AktarSatir,
+  urunSatisKaydet, type AktarSatir,
 } from "./actions";
 import {
+  satisHaritasiKur, donemSatirlari, donemler, onerilenBirim,
+  type UrunSatis, type SatisHucresi,
+} from "@/lib/urun-satis";
+import { AYLAR_12 } from "@/types/database";
+import {
   uretimOzeti, uretimCsv, aylikCsv, kgYaz, adetYaz, miktarYaz, birimliYaz,
-  kilogramaCevir, basligiTani, raporMiktari, raporBirimi, raporBolen,
+  kilogramaCevir, adedeCevir, basligiTani, raporMiktari, raporBirimi, raporBolen,
   raporAciklama, urunHaritasi, kayitUrunu,
   OLCU_BIRIMLERI, AMBALAJ_BIRIMLERI, RAPOR_BIRIMLERI,
   type Urun, type UretimKaydi, type Kirilim, type UrunOzet,
@@ -34,7 +39,7 @@ export interface Tanim {
 
 // Tesis / hat / vardiya kaldırıldı (Nezif: "bu yapıda gerek yok"), o yüzden
 // "Tanımlar" sekmesi de yok — içinde sadece o üç liste vardı.
-type Sekme = "panel" | "aylik" | "giris" | "kayitlar" | "urunler";
+type Sekme = "panel" | "aylik" | "giris" | "satis" | "kayitlar" | "urunler";
 
 function tarihYaz(t: string | null | undefined): string {
   if (!t) return "";
@@ -43,11 +48,14 @@ function tarihYaz(t: string | null | undefined): string {
 }
 
 export function UretimArayuz({
-  kayitlar, urunler, satislar, bugun, yazabilir, yonetimMi, tumSubeleriGorur, tabloYok,
+  kayitlar, urunler, satislar, urunSatislari, satisTablosuYok,
+  bugun, yazabilir, yonetimMi, tumSubeleriGorur, tabloYok,
 }: {
   kayitlar: UretimKaydi[];
   urunler: Urun[];
   satislar: SatisSatiri[];
+  urunSatislari: UrunSatis[];
+  satisTablosuYok: boolean;
   bugun: string;
   yazabilir: boolean;
   yonetimMi: boolean;
@@ -99,10 +107,33 @@ export function UretimArayuz({
     });
   }, [kayitlar, fBas, fBit, fUrun, fGrup, fAmbalaj, fParti]);
 
-  const ozet = useMemo(
-    () => uretimOzeti(listelenen, urunler, bugun, satislar),
-    [listelenen, urunler, bugun, satislar],
+  // Ürün bazlı satış: ürün adı → ay → raporlama birimindeki miktar.
+  // Şube satırları toplam satırının önüne geçiyor (bkz. @/lib/urun-satis).
+  const satisHucreleri = useMemo(
+    () => satisHaritasiKur(urunSatislari, urunler),
+    [urunSatislari, urunler],
   );
+  const satisDegerleri = useMemo(() => {
+    const m = new Map<string, Map<string, number>>();
+    for (const [ad, aylar] of satisHucreleri) {
+      m.set(ad, new Map([...aylar].map(([ay, h]) => [ay, h.deger])));
+    }
+    return m;
+  }, [satisHucreleri]);
+
+  const ozet = useMemo(
+    () => uretimOzeti(listelenen, urunler, bugun, satislar, satisDegerleri),
+    [listelenen, urunler, bugun, satislar, satisDegerleri],
+  );
+
+  // Hem toplam hem şube satırı girilmiş dönemler — kullanıcıya söylenmeli.
+  const cakisanDonemler = useMemo(() => {
+    const liste: string[] = [];
+    for (const [ad, aylar] of satisHucreleri) {
+      for (const [ay, h] of aylar) if (h.toplamSatiriGoardiEdildi) liste.push(`${ad} · ${ay}`);
+    }
+    return liste;
+  }, [satisHucreleri]);
 
   // Kayıtlar tablosunda her satırın kendi raporlama birimini yazabilmek için
   const uHarita = useMemo(() => urunHaritasi(urunler), [urunler]);
@@ -173,8 +204,8 @@ export function UretimArayuz({
         <div className="flex rounded-lg border border-neutral-300 dark:border-neutral-700 overflow-hidden">
           {([
             ["panel", "📊 Panel"], ["aylik", "🗓 Aylık & Satış"],
-            ["giris", "✏️ Üretim Girişi"], ["kayitlar", "📋 Kayıtlar"],
-            ["urunler", "📦 Ürünler"],
+            ["giris", "✏️ Üretim Girişi"], ["satis", "💰 Satış Girişi"],
+            ["kayitlar", "📋 Kayıtlar"], ["urunler", "📦 Ürünler"],
           ] as const).map(([k, e]) => (
             <button
               key={k}
@@ -340,6 +371,19 @@ export function UretimArayuz({
           )}
           {yazabilir && urunler.length > 0 && <TopluAktarma urunler={urunler} />}
         </div>
+      )}
+
+      {/* ── SATIŞ GİRİŞİ ──────────────────────────────────────────── */}
+      {sekme === "satis" && (
+        <SatisGirisi
+          urunler={urunler}
+          satislar={urunSatislari}
+          hucreler={satisHucreleri}
+          bugun={bugun}
+          yonetimMi={yonetimMi}
+          tabloYok={satisTablosuYok}
+          cakisanlar={cakisanDonemler}
+        />
       )}
 
       {/* ── KAYITLAR ──────────────────────────────────────────────── */}
@@ -1152,6 +1196,249 @@ function Dagilim({
         })}
       </ul>
     </div>
+  );
+}
+
+// ─── Ürün bazında satış girişi ────────────────────────────────────────────
+//
+// Nezif: "Şimdilik toplu girilecek ama sonraki aylarda şube bazında da
+// girilmesi durumu oluşacak."
+//
+// Bu ekran TOPLAM girişi yapıyor (bütün şubeler, tek satır). Tablo şube
+// bazını da destekliyor; şube bazına geçildiğinde bu forma bir şube seçici
+// eklenmesi yetecek, veri yapısı değişmeyecek.
+
+function SatisGirisi({
+  urunler, satislar, hucreler, bugun, yonetimMi, tabloYok, cakisanlar,
+}: {
+  urunler: Urun[];
+  satislar: UrunSatis[];
+  hucreler: Map<string, Map<string, SatisHucresi>>;
+  bugun: string;
+  yonetimMi: boolean;
+  tabloYok: boolean;
+  cakisanlar: string[];
+}) {
+  const [d, a, p] = useActionState(urunSatisKaydet, null);
+
+  // Varsayılan dönem: içinde bulunduğumuz ay.
+  const buYil = Number(bugun.slice(0, 4));
+  const buAy = AYLAR_12[Number(bugun.slice(5, 7)) - 1];
+  const [yil, setYil] = useState(buYil);
+  const [ay, setAy] = useState<string>(buAy);
+
+  const aktifUrunler = urunler.filter((u) => u.aktif !== false);
+  const mevcut = useMemo(() => donemSatirlari(satislar, yil, ay), [satislar, yil, ay]);
+
+  // Girilmiş dönemlerin listesi — hangi aylar dolu, tek bakışta görünsün.
+  const doluDonemler = useMemo(() => donemler(satislar), [satislar]);
+
+  if (tabloYok) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300">
+        <b>Satış tablosu henüz oluşturulmamış.</b>{" "}
+        <code className="text-xs">0022_urun_satislari.sql</code> Supabase&apos;de
+        çalıştırılmalı. Çalıştıktan sonra lavaş ve sosların satışını buradan
+        girebilirsiniz.
+      </div>
+    );
+  }
+
+  if (!yonetimMi) {
+    return (
+      <div className={kart + " p-5 text-sm text-neutral-500"}>
+        Satış girişi admin ve genel müdür yetkisindedir. Girilen rakamları Panel ve
+        Aylık &amp; Satış sekmelerinden görebilirsiniz.
+      </div>
+    );
+  }
+
+  const yillar = [buYil + 1, buYil, buYil - 1, buYil - 2];
+
+  return (
+    <div className="space-y-4">
+      <form action={a} className={kart + " p-4 space-y-3"}>
+        <div>
+          <h3 className="font-medium text-sm">Ürün bazında aylık satış girişi</h3>
+          <p className="text-[11px] text-neutral-500">
+            Şu an <b>toplam</b> giriliyor: bütün şubelerin o ay sattığı miktar. İleride
+            şube bazında giriş açıldığında bu rakamlar korunur.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-2">
+          <A e="Yıl">
+            <select
+              name="yil"
+              value={yil}
+              onChange={(e) => setYil(Number(e.target.value))}
+              className={gir}
+            >
+              {yillar.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </A>
+          <A e="Ay">
+            <select name="ay" value={ay} onChange={(e) => setAy(e.target.value)} className={gir}>
+              {AYLAR_12.map((x) => (
+                <option key={x} value={x}>
+                  {x.charAt(0) + x.slice(1).toLocaleLowerCase("tr")}
+                </option>
+              ))}
+            </select>
+          </A>
+          <span className="text-[11px] text-neutral-500 pb-2">
+            {mevcut.size
+              ? `Bu dönemde ${mevcut.size} ürün girilmiş — değerler aşağıda, üzerine yazılır.`
+              : "Bu dönem için henüz giriş yok."}
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-neutral-50 dark:bg-neutral-800/60 text-xs text-neutral-500">
+              <tr>
+                {["Ürün", "Satılan miktar", "Birim", "Raporda görünecek"].map((b) => (
+                  <th key={b} className="text-left font-medium px-3 py-2 whitespace-nowrap">{b}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {aktifUrunler.map((u) => (
+                <SatisSatiriAlani key={u.id} urun={u} mevcut={mevcut.get(u.id) ?? null} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-[11px] text-neutral-500">
+          Boş bıraktığınız ürünün kaydı <b>silinir</b>. Sıfır yazmak &quot;hiç
+          satmadık&quot;, boş bırakmak &quot;henüz girmedik&quot; demektir — grafikte
+          ikisi farklı görünür.
+        </p>
+
+        <button type="submit" disabled={p} className={btn}>
+          {p ? "Kaydediliyor…" : "Dönemi kaydet"}
+        </button>
+
+        {d?.ok && <p className="text-sm text-emerald-600">✓ {d.ok}</p>}
+        {d?.hata && <p className="text-sm text-red-600">{d.hata}</p>}
+      </form>
+
+      {cakisanlar.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-3 text-sm text-amber-800 dark:text-amber-300">
+          <b>Hem toplam hem şube girişi olan dönemler var.</b> Bu dönemlerde{" "}
+          <b>şube girişleri</b> kullanılıyor, toplam satırı hesaba katılmıyor — yoksa
+          rakam iki katına çıkardı: {cakisanlar.slice(0, 6).join(", ")}
+          {cakisanlar.length > 6 ? ` ve ${cakisanlar.length - 6} tane daha` : ""}.
+        </div>
+      )}
+
+      {doluDonemler.length > 0 && (
+        <div className={kart + " p-4"}>
+          <h3 className="text-sm font-semibold mb-1">Girilmiş dönemler</h3>
+          <p className="text-[11px] text-neutral-500 mb-2">
+            Her ürün kendi raporlama biriminde gösteriliyor.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-50 dark:bg-neutral-800/60 text-xs text-neutral-500">
+                <tr>
+                  <th className="text-left font-medium px-3 py-2">Dönem</th>
+                  {aktifUrunler.map((u) => (
+                    <th key={u.id} className="text-right font-medium px-3 py-2 whitespace-nowrap">
+                      {u.ad}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {doluDonemler.map((dn) => (
+                  <tr key={dn.anahtar} className="border-t border-neutral-100 dark:border-neutral-800">
+                    <td className="px-3 py-2 whitespace-nowrap font-medium">
+                      {dn.ay.charAt(0) + dn.ay.slice(1).toLocaleLowerCase("tr")} {dn.yil}
+                    </td>
+                    {aktifUrunler.map((u) => {
+                      const h = hucreler.get(u.ad)?.get(dn.anahtar);
+                      return (
+                        <td key={u.id} className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                          {h ? (
+                            <>
+                              {birimliYaz(h.deger, h.birim)}
+                              {h.subeBazli && (
+                                <span className="block text-[10px] text-neutral-400">
+                                  {h.subeSayisi} şube
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-neutral-300 dark:text-neutral-600">—</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Satış giriş tablosunun tek satırı — anlık "raporda ne görünecek" önizlemesi. */
+function SatisSatiriAlani({ urun, mevcut }: { urun: Urun; mevcut: UrunSatis | null }) {
+  const [miktar, setMiktar] = useState(mevcut ? String(mevcut.miktar) : "");
+  const [birim, setBirim] = useState(mevcut?.olcu_birimi ?? onerilenBirim(urun));
+
+  const sayi = Number(miktar.replace(",", "."));
+  const gecerli = miktar.trim() !== "" && Number.isFinite(sayi) && sayi >= 0;
+  const adet = gecerli ? adedeCevir(sayi, birim, urun) : null;
+  const rBirim = raporBirimi(urun);
+  const onizleme =
+    adet == null
+      ? null
+      : rBirim === "kg"
+      ? adet * (Number(urun.birim_agirlik_kg) || 1)
+      : adet / raporBolen(urun);
+
+  return (
+    <tr className="border-t border-neutral-100 dark:border-neutral-800">
+      <td className="px-3 py-2">
+        <div className="font-medium">{urun.ad}</div>
+        <div className="text-[10px] text-neutral-500">{raporAciklama(urun)}</div>
+      </td>
+      <td className="px-3 py-2">
+        <input
+          name={"miktar_" + urun.id}
+          inputMode="decimal"
+          value={miktar}
+          onChange={(e) => setMiktar(e.target.value)}
+          placeholder="boş = giriş yok"
+          className={gir + " w-32"}
+        />
+      </td>
+      <td className="px-3 py-2">
+        <select
+          name={"birim_" + urun.id}
+          value={birim}
+          onChange={(e) => setBirim(e.target.value)}
+          className={gir}
+        >
+          {OLCU_BIRIMLERI.map((b) => <option key={b} value={b}>{b}</option>)}
+        </select>
+      </td>
+      <td className="px-3 py-2 whitespace-nowrap">
+        {miktar.trim() === "" ? (
+          <span className="text-neutral-400 text-xs">—</span>
+        ) : onizleme == null ? (
+          <span className="text-amber-600 text-xs">çevrilemiyor</span>
+        ) : (
+          <span className="font-medium">{birimliYaz(onizleme, rBirim)}</span>
+        )}
+      </td>
+    </tr>
   );
 }
 

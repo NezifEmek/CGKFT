@@ -6,6 +6,7 @@ import { requireProfile } from "@/lib/auth";
 import {
   kilogramaCevir, OLCU_BIRIMLERI, RAPOR_BIRIMLERI, type Urun,
 } from "@/lib/uretim";
+import { AYLAR_12 } from "@/types/database";
 
 type Sonuc = { hata?: string; ok?: string };
 const YOL = "/uretim";
@@ -355,4 +356,100 @@ export async function topluAktar(
 
   revalidatePath(YOL);
   return { eklenen: eklenecek.length, atlanan };
+}
+
+// ─── Ürün bazında satış ───────────────────────────────────────────────────
+//
+// Şimdilik yalnızca TOPLAM satırları (sube_id = null) giriliyor; tablo şube
+// bazını da destekliyor (bkz. 0022_urun_satislari.sql). Şube bazına
+// geçildiğinde buraya sube_id eklenmesi yetecek.
+
+/**
+ * Bir dönemin ürün satışlarını topluca yazar.
+ *
+ * Ekrandaki bütün ürünler tek seferde gönderiliyor. Boş bırakılan ürün
+ * SIFIR olarak değil, SATIR SİLİNEREK kaydediliyor: sıfır "hiç satmadık"
+ * demek, boş ise "henüz girmedik" demek. İkisini karıştırmak grafikte
+ * gerçek bir sıfır ile veri eksikliğini aynı gösterirdi.
+ */
+export async function urunSatisKaydet(
+  _o: { ok?: string; hata?: string } | null,
+  formData: FormData,
+): Promise<{ ok?: string; hata?: string }> {
+  const profile = await requireProfile();
+  if (profile.rol !== "admin" && profile.rol !== "genel_mudur") {
+    return { hata: "Satış girişi yetkisi admin/genel müdürde." };
+  }
+
+  const yil = Number(m(formData, "yil"));
+  const ay = m(formData, "ay").toLocaleUpperCase("tr");
+  if (!Number.isFinite(yil) || yil < 2000 || yil > 2100) return { hata: "Yıl geçersiz." };
+  if (!(AYLAR_12 as readonly string[]).includes(ay)) return { hata: "Ay geçersiz." };
+
+  const supabase = await createClient();
+
+  // Formdaki alan adları: miktar_<urunId> ve birim_<urunId>
+  const yazilacak: {
+    urun_id: string; yil: number; ay: string; sube_id: null;
+    miktar: number; olcu_birimi: string; guncelleyen_id: string;
+  }[] = [];
+  const silinecek: string[] = [];
+
+  for (const [anahtar, deger] of formData.entries()) {
+    if (!anahtar.startsWith("miktar_")) continue;
+    const urunId = anahtar.slice("miktar_".length);
+    const ham = String(deger ?? "").trim().replace(",", ".");
+
+    if (!ham) {
+      silinecek.push(urunId);
+      continue;
+    }
+    const miktar = Number(ham);
+    if (!Number.isFinite(miktar) || miktar < 0) {
+      return { hata: `Geçersiz miktar: "${ham}"` };
+    }
+    const birim = m(formData, "birim_" + urunId);
+    yazilacak.push({
+      urun_id: urunId,
+      yil,
+      ay,
+      sube_id: null,
+      miktar,
+      olcu_birimi: (OLCU_BIRIMLERI as readonly string[]).includes(birim) ? birim : "Adet",
+      guncelleyen_id: profile.id,
+    });
+  }
+
+  if (yazilacak.length) {
+    // Kısmi benzersiz indeks (urun_id, yil, ay) WHERE sube_id is null —
+    // aynı dönem tekrar girilince üzerine yazılır, kopya oluşmaz.
+    const { error } = await supabase
+      .from("urun_satislari")
+      .upsert(yazilacak, { onConflict: "urun_id,yil,ay" });
+    if (error) {
+      if (/relation .* does not exist/i.test(error.message) || /schema cache/i.test(error.message)) {
+        return { hata: "Satış tablosu henüz oluşturulmamış — 0022_urun_satislari.sql çalıştırılmalı." };
+      }
+      return { hata: "Kaydedilemedi: " + error.message };
+    }
+  }
+
+  if (silinecek.length) {
+    await supabase
+      .from("urun_satislari")
+      .delete()
+      .eq("yil", yil)
+      .eq("ay", ay)
+      .is("sube_id", null)
+      .in("urun_id", silinecek);
+  }
+
+  revalidatePath(YOL);
+  const ayAdi = ay.charAt(0) + ay.slice(1).toLocaleLowerCase("tr");
+  return {
+    ok:
+      `${ayAdi} ${yil} satışları kaydedildi` +
+      (yazilacak.length ? ` — ${yazilacak.length} ürün` : "") +
+      (silinecek.length ? `, ${silinecek.length} ürün boş bırakıldı` : ""),
+  };
 }

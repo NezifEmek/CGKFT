@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { tumSatirlariGetir, sonuclaGetir } from "@/lib/supabase/fetch-all";
 import type { Urun, UretimKaydi, SatisSatiri } from "@/lib/uretim";
+import type { UrunSatis } from "@/lib/urun-satis";
 import { UretimArayuz } from "./uretim-arayuz";
 
 export default async function UretimSayfasi() {
@@ -11,7 +12,7 @@ export default async function UretimSayfasi() {
 
   // uretim_tanimlari (tesis/hat/vardiya) artık okunmuyor — o alanlar
   // formdan kaldırıldı. Tablo veritabanında duruyor ama kullanılmıyor.
-  const [kayitSonuc, urunler, satislar] = await Promise.all([
+  const [kayitSonuc, urunler, satislar, urunSatislariHam] = await Promise.all([
     sonuclaGetir<UretimKaydi>(() =>
       tumSatirlariGetir<UretimKaydi>((f, t) =>
         supabase
@@ -43,12 +44,23 @@ export default async function UretimSayfasi() {
         .range(f, t)
         .returns<SatisSatiri[]>(),
     ).catch(() => [] as SatisSatiri[]),
+    // Ürün bazında satış (0022). Tablo yoksa ekran uyarır, çökmez.
+    tumSatirlariGetir<UrunSatis>((f, t) =>
+      supabase
+        .from("urun_satislari")
+        .select("id, urun_id, yil, ay, sube_id, miktar, olcu_birimi, aciklama, updated_at")
+        .range(f, t)
+        .returns<UrunSatis[]>(),
+    ).catch(() => null),
   ]);
 
   // Raporlama birimi sütunları yoksa kod hepsini kilogram sayıyor. Bu SESSİZ
   // bir geri düşüş ve 2026-08-03'te tam olarak buna takıldık: ekranda her
   // ürün kg göründü, sebebi görünmedi. Artık açıkça yazıyor.
   const birimSutunuYok = urunler.length > 0 && !("rapor_birimi" in urunler[0]);
+  // null = tablo hiç yok (0022 çalışmamış); [] = tablo var, veri yok.
+  const satisTablosuYok = urunSatislariHam === null;
+  const urunSatislari = urunSatislariHam ?? [];
 
   const yazabilir = profile.rol !== "denetmen";
   const yonetimMi = profile.rol === "admin" || profile.rol === "genel_mudur";
@@ -84,6 +96,8 @@ export default async function UretimSayfasi() {
         // ekran onları "(pasif)" diye işaretler.
         urunler={urunler}
         satislar={satislar}
+        urunSatislari={urunSatislari}
+        satisTablosuYok={satisTablosuYok}
         bugun={bugun}
         yazabilir={yazabilir}
         yonetimMi={yonetimMi}
