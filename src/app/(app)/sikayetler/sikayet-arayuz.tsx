@@ -87,11 +87,20 @@ function UrunAlani({
     );
   }
 
-  const listede = urunler.some((u) => u.ad === mevcut);
+  // Eski kayıtlarda ürün elle yazıldığı için yazım farklı olabiliyor:
+  // ŞKY-1007'de "Lavaş", ürün tanımında "LAVAŞ". Büyük/küçük harf farkı
+  // yüzünden aynı ürünü "eski kayıt" diye göstermek yanlış olurdu — Türkçe
+  // kurallarıyla karşılaştırılıp tanımdaki YAZIMA hizalanıyor.
+  const denk = urunler.find(
+    (u) => u.ad.toLocaleUpperCase("tr") === mevcut.toLocaleUpperCase("tr"),
+  );
+  const secili = denk?.ad ?? mevcut;
+  const listede = Boolean(denk);
+
   return (
     <label className="block">
       <span className="block text-xs text-neutral-500 mb-1">Ürün / Hizmet</span>
-      <select name="urun" defaultValue={mevcut} className={gir + " w-full"}>
+      <select name="urun" defaultValue={secili} className={gir + " w-full"}>
         <option value="">— ürün belirtilmedi —</option>
         {urunler.map((u) => (
           <option key={u.id} value={u.ad}>
@@ -99,7 +108,8 @@ function UrunAlani({
             {u.aktif === false ? " (pasif)" : ""}
           </option>
         ))}
-        {/* Eski serbest metin — listede yoksa korunuyor */}
+        {/* Eski serbest metin — hiçbir ürüne denk gelmiyorsa korunuyor,
+            yoksa kaydı açıp kapatmak ürünü sessizce silerdi. */}
         {mevcut && !listede && <option value={mevcut}>{mevcut} (eski kayıt)</option>}
       </select>
       <span className="block text-[11px] text-neutral-400 mt-0.5">
