@@ -21,7 +21,6 @@ import {
   SegmentDonut,
   YatayCubukGrafik,
 } from "@/components/grafikler";
-import { DikkatPaneli } from "@/components/dikkat-paneli";
 import { dikkatSatirlari } from "@/lib/dikkat";
 import { YazdirDugmesi } from "@/components/yazdir-dugmesi";
 
@@ -235,6 +234,10 @@ export default async function GenelBakisSayfasi({
     const onceki = sonDenetimMap.get(d.sube_id);
     if (!onceki || d.tarih > onceki) sonDenetimMap.set(d.sube_id, d.tarih);
   }
+  // Dikkat satırları artık burada DEĞİL, /bekleyenler sayfasında gösteriliyor.
+  // Sayısı burada sadece "şu kadar iş bekliyor" bağlantısı için hesaplanıyor:
+  // Nezif'in isteği üzerine uyarı kutusu Genel Bakış'ın başından kaldırılıp
+  // kişiye özel bir karşılama ekranına taşındı.
   const dikkat = dikkatSatirlari({
     bugun: new Date().toISOString().slice(0, 10),
     sikayetler: dSikayet,
@@ -247,6 +250,8 @@ export default async function GenelBakisSayfasi({
       .filter((s) => s.aktif !== false)
       .map((s) => ({ subeId: s.id, sonDenetim: sonDenetimMap.get(s.id) ?? null })),
   });
+  const dikkatAdet = dikkat.reduce((t, s) => t + s.adet, 0);
+  const dikkatAcil = dikkat.some((s) => s.acil);
 
   return (
     <div className="space-y-4">
@@ -262,7 +267,24 @@ export default async function GenelBakisSayfasi({
         <YazdirDugmesi baslik={`Genel-Bakis-${bas}-${bit}-${CARI_YIL}`} />
       </div>
 
-      <DikkatPaneli satirlar={dikkat} />
+      {/* Uyarı kutusunun yerine tek satırlık bir bağlantı. Ayrıntı ve
+          kişiye atanmış işler "Bekleyen Konular" ekranında. */}
+      {dikkatAdet > 0 && (
+        <Link
+          href="/bekleyenler"
+          className={`flex items-center gap-2.5 rounded-xl border px-4 py-2.5 text-sm ${
+            dikkatAcil
+              ? "border-red-200 dark:border-red-900/60 bg-red-50/60 dark:bg-red-950/20"
+              : "border-amber-200 dark:border-amber-900/60 bg-amber-50/60 dark:bg-amber-950/20"
+          }`}
+        >
+          <span>{dikkatAcil ? "⚠️" : "🔔"}</span>
+          <span>
+            Yetki alanınızda <b>{dikkatAdet}</b> kayıt aksiyon bekliyor.
+          </span>
+          <span className="ml-auto text-xs text-neutral-500">Bekleyen Konular →</span>
+        </Link>
+      )}
 
       {/* Dönem seçici */}
       <form

@@ -18,5 +18,8 @@ export async function girisYap(_onceki: { hata?: string } | null, formData: Form
     return { hata: "Giriş başarısız: e-posta veya şifre hatalı." };
   }
 
-  redirect("/");
+  // Giriş sonrası Genel Bakış değil Bekleyen Konular açılıyor: kullanıcı
+  // önce kendisine düşen işi görsün, rakamlara sonra baksın (Nezif'in
+  // isteği). Genel Bakış menüde ve "/" adresinde yerinde duruyor.
+  redirect("/bekleyenler");
 }

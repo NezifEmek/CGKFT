@@ -7,6 +7,15 @@ const eslintConfig = defineConfig([
   ...nextTs,
   // Override default ignores of eslint-config-next.
   globalIgnores([
+    // DİKKAT: globalIgnores, ESLint'in kendi varsayılan yok sayma listesinin
+    // YERİNE geçer — node_modules dahil. Burada yazılmazsa eslint hazır
+    // paketlerin kaynağını da tarıyordu: `npm run lint` 7 dakika sürüp
+    // 139.397 sorun bildiriyordu ve neredeyse hepsi zod, next gibi
+    // paketlerdendi. Gerçek hatalar o yığının içinde görünmez oluyordu.
+    //
+    // Asıl koruma package.json'daki "eslint src scripts" — bu satır ikinci
+    // emniyet, biri eslint'i çıplak çağırırsa diye.
+    "**/node_modules/**",
     // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",

@@ -13,6 +13,7 @@ import {
   type Urun, type UretimKaydi, type Kirilim, type UrunOzet,
   type AylikSatir, type SatisSatiri,
 } from "@/lib/uretim";
+import { excelTarihiCoz } from "@/lib/excel-tarih";
 import { YazdirDugmesi } from "@/components/yazdir-dugmesi";
 
 const gir =
@@ -969,9 +970,16 @@ function TopluAktarma({ urunler }: { urunler: Urun[] }) {
     try {
       const XLSX = await import("xlsx");
       const veri = new Uint8Array(await dosya.arrayBuffer());
-      const kitap = XLSX.read(veri, { type: "array", cellDates: true });
+      // cellDates BİLEREK KAPALI: açıkken kütüphane tarihi yerel saatli bir
+      // Date'e çeviriyor ve tüm ay bir gün geriye kayıyordu (bkz.
+      // excelTarihiCoz açıklaması). Kapalıyken tarih ham seri numarası
+      // olarak geliyor — saat dilimi hiç işin içine girmiyor.
+      const kitap = XLSX.read(veri, { type: "array" });
       const sayfa = kitap.Sheets[kitap.SheetNames[0]];
-      const satirlar = XLSX.utils.sheet_to_json<Record<string, unknown>>(sayfa, { defval: "" });
+      const satirlar = XLSX.utils.sheet_to_json<Record<string, unknown>>(sayfa, {
+        defval: "",
+        raw: true,
+      });
 
       if (!satirlar.length) {
         setDurum("Dosyada satır bulunamadı.");
@@ -983,9 +991,11 @@ function TopluAktarma({ urunler }: { urunler: Urun[] }) {
         for (const [baslik, deger] of Object.entries(ham)) {
           const alan = basligiTani(baslik);
           if (!alan) continue;
+          // Tarih alanları ayrı çözülüyor: seri numarası, Date ya da metin
+          // olabilir. Diğer alanlar düz metne çevriliyor.
           s[alan] =
-            deger instanceof Date
-              ? deger.toISOString().slice(0, 10)
+            alan === "tarih" || alan === "skt"
+              ? excelTarihiCoz(deger) ?? String(deger ?? "").trim()
               : String(deger ?? "").trim();
         }
         return s as AktarSatir;

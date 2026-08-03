@@ -38,6 +38,8 @@ export const BOLUM_SIRASI: { ad: string; simge: string; acikVarsayilan: boolean 
 
 /** Menüdeki tüm ekranlar. Sıra menüde göründüğü sıradır. */
 export const SAYFALAR: SayfaTanimi[] = [
+  // Giriş sonrası açılan ekran — kişiye atanmış işler burada.
+  { anahtar: "bekleyenler", href: "/bekleyenler", etiket: "🔔 Bekleyen Konular", bolum: "Genel" },
   { anahtar: "genel", href: "/", etiket: "📊 Genel Bakış", bolum: "Genel" },
 
   // Raporlar: "rapor almak istiyorum" diye düşünen kullanıcının tek durağı.
@@ -116,6 +118,10 @@ export function gorunurSayfalar(rol: Rol, sayfaYetkileri: unknown): Set<string> 
   if (rol !== "admin") sonuc.delete("kullanicilar");
   // Herkes en azından Genel Bakış'ı görsün, yoksa giriş sonrası boş ekran kalır.
   sonuc.add("genel");
+  // Bekleyen Konular giriş ekranı: kimseden kapatılamaz, yoksa giriş
+  // sonrası yönlendirme yetkisiz sayfaya düşerdi. İçeriği zaten kişiye
+  // özel — herkes yalnızca kendi işlerini görür.
+  sonuc.add("bekleyenler");
   return sonuc;
 }
 

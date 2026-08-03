@@ -4,6 +4,8 @@
 // alındı. Dikkat çeken nokta: "ayran" GELİR, "yemek" GİDER sayılır (personel
 // yemeği). Aylık stok/gider kalemlerinin tamamı gidere eklenir.
 
+import { excelTarihiCoz } from "@/lib/excel-tarih";
+
 export const AYLAR_12 = [
   "OCAK",
   "ŞUBAT",
@@ -129,35 +131,16 @@ export function sayiOku(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Excel hücresini YYYY-MM-DD'ye çevirir; olmuyorsa null. */
+/**
+ * Excel hücresini YYYY-MM-DD'ye çevirir; olmuyorsa null.
+ *
+ * Çevrim @/lib/excel-tarih'e taşındı. Buradaki eski kod Date nesnelerinde
+ * `toISOString()` kullanıyordu ve gg-arayuz dosyayı `cellDates: true` ile
+ * okuduğu için tarihler bir gün geriye kayıyordu — üretim modülünde ortaya
+ * çıkan hatanın aynısı. Ay sınırındaki günleri yanlış aya yazıyordu.
+ */
 export function tarihCevir(v: unknown): string | null {
-  if (v === null || v === undefined || v === "") return null;
-
-  // Excel seri numarası (1900 tarih sistemi)
-  if (typeof v === "number" && v > 20000 && v < 60000) {
-    const ms = Math.round((v - 25569) * 86400 * 1000);
-    const d = new Date(ms);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
-  }
-
-  if (v instanceof Date) {
-    return Number.isNaN(v.getTime()) ? null : v.toISOString().slice(0, 10);
-  }
-
-  const s = String(v).trim();
-  // 01.05.2026 / 01/05/2026 / 1-5-2026
-  const m = s.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})$/);
-  if (m) {
-    const gun = Number(m[1]);
-    const ayNo = Number(m[2]);
-    let yil = Number(m[3]);
-    if (yil < 100) yil += 2000;
-    if (gun < 1 || gun > 31 || ayNo < 1 || ayNo > 12) return null;
-    return `${yil}-${String(ayNo).padStart(2, "0")}-${String(gun).padStart(2, "0")}`;
-  }
-  // 2026-05-01
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  return null;
+  return excelTarihiCoz(v);
 }
 
 /** Sayfa adından ay tahmini (ör. "DARICA MAYIS" → MAYIS). */

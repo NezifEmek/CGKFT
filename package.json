@@ -9,7 +9,7 @@
     "denetim": "node scripts/use-server-denetimi.mjs",
     "tip-kontrol": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint src scripts",
     "migrate": "tsx scripts/migrate-data-json.ts"
   },
   "dependencies": {

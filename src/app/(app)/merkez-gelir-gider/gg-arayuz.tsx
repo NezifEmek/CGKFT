@@ -623,7 +623,9 @@ function ExcelAktar({ subeler }: { subeler: GGSube[] }) {
     try {
       const XLSX = await import("xlsx");
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array", cellDates: true });
+      // cellDates BİLEREK KAPALI — açıkken tarihler yerel saatli Date'e
+      // çevrilip bir gün geriye kayıyordu (bkz. @/lib/excel-tarih).
+      const wb = XLSX.read(buf, { type: "array" });
       const satirlar: OnizlemeSatiri[] = [];
 
       for (const sayfaAdi of wb.SheetNames) {
