@@ -1,18 +1,32 @@
-// uretim.ts — Günlük üretim: birim çevrimi ve toplamlar.
+// uretim.ts — Günlük üretim: birim çevrimi, raporlama birimi ve toplamlar.
 //
-// Modülün tek zor yeri birim çevrimi. Üretim adet, koli veya kg olarak
-// girilebiliyor; "günlük toplam üretim" diye anlamlı bir sayı üretmek
-// için hepsinin kilograma indirgenmesi gerekiyor.
+// ── İki ayrı birim kavramı var, karıştırmayın ────────────────────────────
+//
+// 1) ÖLÇÜ BİRİMİ (olcu_birimi) — kaydı GİRERKEN kullanılan birim.
+//    Aynı ürün bir gün "9.000 Adet", başka gün "470 Paket", başka gün
+//    "2.114 Kg" olarak girilebiliyor. Girişte kolaylık esas.
+//
+// 2) RAPORLAMA BİRİMİ (urun.rapor_birimi) — raporda GÖSTERİLEN birim.
+//    Ürün tanımında sabit. Lavaş paket, mini soslar 250'lik paket,
+//    çiğköfte kilogram diye raporlanır.
+//
+// Bu ikisi bilerek ayrı: kullanıcı istediği gibi girer, rapor her zaman
+// aynı birimde çıkar. Rapor birimi üründe durduğu için değiştirildiğinde
+// GEÇMİŞ kayıtlar da yeni birimde görünür — istenen davranış bu.
 //
 // Çevrilemeyen kayıt SIFIR sayılmaz, NULL kalır. Sıfır "hiç üretilmedi"
-// demek olurdu; oysa gerçek durum "üretildi ama kg'a çeviremiyoruz".
-// Ekran bu kayıtları ayrıca sayıp uyarır — sessizce eksik toplam
-// göstermektense eksiği söylemek doğru.
+// demek olurdu; oysa gerçek durum "üretildi ama çeviremiyoruz". Ekran bu
+// kayıtları ayrıca sayıp uyarır.
+
+import { AYLAR_12 } from "@/types/database";
 
 export const OLCU_BIRIMLERI = ["Adet", "Kg", "Koli", "Kutu", "Paket"] as const;
 export type OlcuBirimi = (typeof OLCU_BIRIMLERI)[number];
 
 export const AMBALAJ_BIRIMLERI = ["Adet", "Koli", "Kutu", "Paket"] as const;
+
+export const RAPOR_BIRIMLERI = ["kg", "adet", "paket", "koli"] as const;
+export type RaporBirimi = (typeof RAPOR_BIRIMLERI)[number];
 
 export interface Urun {
   id: string;
@@ -25,6 +39,10 @@ export interface Urun {
   koli_adedi: number | null;
   raf_omru_gun: number | null;
   aktif: boolean;
+  /** 0021 öncesi kayıtlarda yok — okunmadığında "kg" varsayılır. */
+  rapor_birimi?: string | null;
+  /** Bir raporlama biriminde kaç adet var. Yoksa 1. */
+  rapor_bolen?: number | string | null;
 }
 
 export interface UretimKaydi {
@@ -48,19 +66,30 @@ export interface UretimKaydi {
   created_at: string;
 }
 
+/** Aylık şube satışı — üretimle karşılaştırma için. */
+export interface SatisSatiri {
+  yil: number;
+  ay: string;
+  kg: number | string;
+}
+
 function say(x: number | string | null | undefined): number | null {
   if (x == null || x === "") return null;
   const n = Number(x);
   return Number.isFinite(n) ? n : null;
 }
 
+function yuvarla(n: number): number {
+  return Math.round(n * 1000) / 1000;
+}
+
 /**
  * Girilen miktarı kilograma çevirir. Çevrilemiyorsa null.
  *
- * Kutu ve Paket, ambalaj birimi olarak koliyle aynı mantıkta çalışır:
- * ürün tanımındaki "bir kolide kaç adet" sayısı kullanılır. Ayrı bir
- * kutu/paket adedi tutmak veri girişini ağırlaştırırdı; pratikte
- * kolideki adet neyse kutudaki da odur.
+ * Kutu ve Paket, koliyle aynı mantıkta çalışır: ürün tanımındaki "bir
+ * kolide kaç adet" sayısı kullanılır. Ayrı bir kutu/paket adedi tutmak
+ * veri girişini ağırlaştırırdı; pratikte kolideki adet neyse kutudaki da
+ * odur.
  */
 export function kilogramaCevir(
   miktar: number | string,
@@ -77,38 +106,137 @@ export function kilogramaCevir(
   if (olcuBirimi === "Adet") return yuvarla(m * birimKg);
 
   // Koli / Kutu / Paket → adet → kg
-  const koli = urun?.koli_adedi;
-  if (!koli || koli <= 0) return null;
+  const koli = say(urun?.koli_adedi);
+  if (koli == null || koli <= 0) return null;
   return yuvarla(m * koli * birimKg);
 }
 
-function yuvarla(n: number): number {
-  return Math.round(n * 1000) / 1000;
+/**
+ * Girilen miktarı ADETE çevirir — raporlama biriminin temel taşı.
+ *
+ * Neden gerekli: rapor birimi "50'lik paket" ise miktarı doğrudan 50'ye
+ * bölemeyiz; çünkü miktar Adet de olabilir, Paket de, Kg de. Önce hepsi
+ * ortak paydaya (adet) indirilir, sonra bölünür.
+ */
+export function adedeCevir(
+  miktar: number | string,
+  olcuBirimi: string,
+  urun: Pick<Urun, "birim_agirlik_kg" | "koli_adedi"> | null | undefined,
+): number | null {
+  const m = say(miktar);
+  if (m == null) return null;
+  if (olcuBirimi === "Adet") return yuvarla(m);
+
+  if (olcuBirimi === "Kg") {
+    const birimKg = say(urun?.birim_agirlik_kg);
+    if (birimKg == null || birimKg <= 0) return null;
+    return yuvarla(m / birimKg);
+  }
+
+  // Koli / Kutu / Paket
+  const koli = say(urun?.koli_adedi);
+  if (koli == null || koli <= 0) return null;
+  return yuvarla(m * koli);
+}
+
+// ─── Raporlama birimi ─────────────────────────────────────────────────────
+
+export function raporBirimi(urun: Urun | null | undefined): RaporBirimi {
+  const b = String(urun?.rapor_birimi ?? "kg").toLowerCase();
+  return (RAPOR_BIRIMLERI as readonly string[]).includes(b) ? (b as RaporBirimi) : "kg";
+}
+
+export function raporBolen(urun: Urun | null | undefined): number {
+  const n = say(urun?.rapor_bolen);
+  return n != null && n > 0 ? n : 1;
+}
+
+/**
+ * Ürünün raporlama biriminin insan diliyle açıklaması.
+ * Nezif'in isteği: "açıklamalarında da böyle olduğu açıkça yazılsın."
+ */
+export function raporAciklama(urun: Urun | null | undefined): string {
+  const b = raporBirimi(urun);
+  if (b === "kg") return "kilogram olarak raporlanır";
+  const bolen = raporBolen(urun);
+  if (bolen === 1) return `${b} olarak raporlanır`;
+  return `1 ${b} = ${adetYaz(bolen)} adet`;
+}
+
+/** Kısa etiket: "paket (50'li)" — tablo başlığında kullanılır. */
+export function raporEtiketi(urun: Urun | null | undefined): string {
+  const b = raporBirimi(urun);
+  const bolen = raporBolen(urun);
+  if (b === "kg" || bolen === 1) return b;
+  return `${b} · ${adetYaz(bolen)}'li`;
+}
+
+/** Bir kaydın, ürünün kendi raporlama birimindeki miktarı. Çevrilemezse null. */
+export function raporMiktari(
+  kayit: Pick<UretimKaydi, "miktar" | "olcu_birimi" | "kg_karsiligi">,
+  urun: Urun | null | undefined,
+): number | null {
+  if (raporBirimi(urun) === "kg") return say(kayit.kg_karsiligi);
+  const adet = adedeCevir(kayit.miktar, kayit.olcu_birimi, urun);
+  if (adet == null) return null;
+  return yuvarla(adet / raporBolen(urun));
+}
+
+// ─── Kayıt → ürün eşleme ──────────────────────────────────────────────────
+//
+// Kayıtta ürün adı/kodu kopyalanmış olarak duruyor (ürün silinse bile
+// geçmiş okunabilsin diye). Rapor birimini bulmak için asıl ürün tanımına
+// dönmek gerekiyor: önce kimlikten, olmazsa koddan, olmazsa addan.
+
+export type UrunHaritasi = Map<string, Urun>;
+
+function anahtarla(s: string | null | undefined): string {
+  return (s ?? "").trim().toLocaleUpperCase("tr");
+}
+
+export function urunHaritasi(urunler: Urun[]): UrunHaritasi {
+  const m: UrunHaritasi = new Map();
+  for (const u of urunler) {
+    m.set("id:" + u.id, u);
+    if (u.kod) m.set("kod:" + anahtarla(u.kod), u);
+    if (u.ad) m.set("ad:" + anahtarla(u.ad), u);
+  }
+  return m;
+}
+
+export function kayitUrunu(
+  k: Pick<UretimKaydi, "urun_id" | "urun_kod" | "urun_ad">,
+  harita: UrunHaritasi,
+): Urun | null {
+  return (
+    (k.urun_id ? harita.get("id:" + k.urun_id) : undefined) ??
+    harita.get("kod:" + anahtarla(k.urun_kod)) ??
+    harita.get("ad:" + anahtarla(k.urun_ad)) ??
+    null
+  );
 }
 
 /**
  * Kilogram karşılığı olmayan kayıtlar.
  *
- * Bu bir HATA DEĞİL: lavaş gibi bazı ürünler kilogramla ölçülmüyor, adet
- * olarak üretiliyor. Önceden bunlar "çevrilemedi" diye uyarı üretiyordu;
- * artık ayrı bir toplamda sayılıyorlar.
+ * Bu bir HATA DEĞİL: bazı ürünler kilogramla ölçülmüyor. Ekran bunları
+ * ayrı sayar.
  */
 export function kgsizKayitlar(kayitlar: UretimKaydi[]): UretimKaydi[] {
   return kayitlar.filter((k) => say(k.kg_karsiligi) == null);
 }
 
+// ─── Kırılımlar ───────────────────────────────────────────────────────────
+
 export interface Kirilim {
   anahtar: string;
   kg: number;
-  /** Kilogramı olmayan ürünlerin miktarı (adet/koli — kendi biriminde) */
+  /** Kilogramı olmayan ürünlerin miktarı (kendi giriş biriminde) */
   adet: number;
   kayit: number;
 }
 
-function kir(
-  kayitlar: UretimKaydi[],
-  al: (k: UretimKaydi) => string,
-): Kirilim[] {
+function kir(kayitlar: UretimKaydi[], al: (k: UretimKaydi) => string): Kirilim[] {
   const m = new Map<string, { kg: number; adet: number; kayit: number }>();
   for (const k of kayitlar) {
     const a = al(k) || "(belirtilmemiş)";
@@ -131,85 +259,198 @@ function kir(
     .sort((a, b) => b.kg - a.kg || b.adet - a.adet);
 }
 
+/** Bir ürünün, kendi raporlama birimindeki toplamı. */
+export interface UrunOzet {
+  urunId: string | null;
+  ad: string;
+  birim: RaporBirimi;
+  bolen: number;
+  aciklama: string;
+  etiket: string;
+  /** Kendi raporlama birimindeki toplam */
+  deger: number;
+  /** Bilgi amaçlı kilogram toplamı — kg bazlı olmayan üründe de dolu olabilir */
+  kg: number;
+  kayit: number;
+  /** Raporlama birimine çevrilemeyen kayıt sayısı */
+  cevrilemeyen: number;
+}
+
+// ─── Aylık üretim + satış ─────────────────────────────────────────────────
+
+export interface AylikSatir {
+  /** "2026-07" */
+  ay: string;
+  /** "Temmuz 2026" */
+  etiket: string;
+  /** ürün adı → kendi raporlama birimindeki miktar */
+  urunler: Record<string, number>;
+  /** kg bazlı raporlanan ürünlerin ay toplamı (çiğköfte) */
+  kgToplam: number;
+  /** O ayın şube satışı (kg). Veri girilmemişse null. */
+  satisKg: number | null;
+  kayit: number;
+}
+
+/**
+ * Şube satışlarını "2026-07" biçimli anahtara indirir.
+ * Satış tablosu ayı "TEMMUZ" gibi Türkçe adla tutuyor.
+ */
+export function satisHaritasi(satislar: SatisSatiri[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const s of satislar) {
+    const i = AYLAR_12.indexOf(anahtarla(s.ay) as (typeof AYLAR_12)[number]);
+    if (i < 0) continue;
+    const anahtar = `${s.yil}-${String(i + 1).padStart(2, "0")}`;
+    m.set(anahtar, (m.get(anahtar) ?? 0) + (say(s.kg) ?? 0));
+  }
+  return m;
+}
+
+export function ayEtiketi(ay: string): string {
+  const [y, a] = ay.split("-");
+  const i = Number(a) - 1;
+  const ad = AYLAR_12[i];
+  if (!ad) return ay;
+  return `${ad.charAt(0)}${ad.slice(1).toLocaleLowerCase("tr")} ${y}`;
+}
+
 export interface UretimOzet {
+  /** kg olarak raporlanan ürünlerin toplamı */
   toplamKg: number;
-  /** Kilogramla ölçülmeyen ürünlerin toplam miktarı (lavaş vb.) */
-  toplamAdet: number;
+  /** kg olarak raporlanan ürün adları — başlıklarda gösterilir */
+  kgUrunAdlari: string[];
   kayitSayisi: number;
-  /** Kilogramla ölçülmeyen kayıt sayısı — uyarı değil, bilgi */
+  /** Kilogram karşılığı hesaplanamayan kayıt sayısı */
   adetliKayitSayisi: number;
   bugunKg: number;
-  bugunAdet: number;
   buAyKg: number;
-  buAyAdet: number;
   gunlukOrtalamaKg: number | null;
   uretimGunuSayisi: number;
 
-  urunler: Kirilim[];
+  /** Her ürün kendi raporlama biriminde */
+  urunOzetleri: UrunOzet[];
   gruplar: Kirilim[];
   ambalajlar: Kirilim[];
+  /** kg bazlı ürünlerin günlük trendi */
   gunluk: { tarih: string; kg: number }[];
-  aylik: { ay: string; kg: number }[];
+  /** Tüm ürünlerin ay ay dökümü + satış karşılaştırması */
+  aylik: AylikSatir[];
 }
 
 /**
  * Üretim özeti.
  *
- * Toplam TEK bir sayı değil: kilogramla ölçülen ürünler kg, ölçülmeyenler
- * (lavaş gibi) kendi biriminde toplanıyor. İkisini tek sayıda birleştirmek
- * anlamsız olurdu — 500 kg ile 300 adet lavaş toplanamaz.
+ * Toplam TEK bir sayı değil: her ürün kendi raporlama biriminde toplanıyor.
+ * 55.267 kg çiğköfte ile 9.646 paket lavaş toplanamaz — üstteki kartlar bu
+ * yüzden yalnızca kilogramla raporlanan ürünleri gösteriyor, geri kalanı
+ * ürün ve ay tablolarında kendi biriminde duruyor.
  */
-export function uretimOzeti(kayitlar: UretimKaydi[], bugun: string): UretimOzet {
+export function uretimOzeti(
+  kayitlar: UretimKaydi[],
+  urunler: Urun[],
+  bugun: string,
+  satislar: SatisSatiri[] = [],
+): UretimOzet {
+  const harita = urunHaritasi(urunler);
+  const satisMap = satisHaritasi(satislar);
+
   let toplamKg = 0;
-  let toplamAdet = 0;
+  const kgUrunAdlari = new Set<string>();
   const gunMap = new Map<string, number>();
-  const gunAdetMap = new Map<string, number>();
-  const ayMap = new Map<string, number>();
-  const ayAdetMap = new Map<string, number>();
+
+  // ürün adı → özet
+  const urunMap = new Map<string, UrunOzet>();
+  // ay → satır
+  const ayMap = new Map<string, AylikSatir>();
 
   for (const k of kayitlar) {
-    const kg = say(k.kg_karsiligi);
+    const urun = kayitUrunu(k, harita);
+    const ad = k.urun_ad || k.urun_kod || urun?.ad || "(belirtilmemiş)";
+    const birim = raporBirimi(urun);
     const g = k.tarih.slice(0, 10);
-    const a = k.tarih.slice(0, 7);
+    const ay = k.tarih.slice(0, 7);
+    const kg = say(k.kg_karsiligi);
+    const deger = raporMiktari(k, urun);
 
-    if (kg == null) {
-      const adet = say(k.miktar) ?? 0;
-      toplamAdet += adet;
-      gunAdetMap.set(g, (gunAdetMap.get(g) ?? 0) + adet);
-      ayAdetMap.set(a, (ayAdetMap.get(a) ?? 0) + adet);
-    } else {
+    // ── Ürün özeti
+    let uo = urunMap.get(ad);
+    if (!uo) {
+      uo = {
+        urunId: urun?.id ?? null,
+        ad,
+        birim,
+        bolen: raporBolen(urun),
+        aciklama: raporAciklama(urun),
+        etiket: raporEtiketi(urun),
+        deger: 0,
+        kg: 0,
+        kayit: 0,
+        cevrilemeyen: 0,
+      };
+      urunMap.set(ad, uo);
+    }
+    if (deger == null) uo.cevrilemeyen++;
+    else uo.deger += deger;
+    if (kg != null) uo.kg += kg;
+    uo.kayit++;
+
+    // ── Ay satırı
+    let as = ayMap.get(ay);
+    if (!as) {
+      as = {
+        ay,
+        etiket: ayEtiketi(ay),
+        urunler: {},
+        kgToplam: 0,
+        satisKg: satisMap.get(ay) ?? null,
+        kayit: 0,
+      };
+      ayMap.set(ay, as);
+    }
+    if (deger != null) as.urunler[ad] = yuvarla((as.urunler[ad] ?? 0) + deger);
+    as.kayit++;
+
+    // ── Kilogramla raporlanan ürünler: kartlar ve trend bunlardan çıkıyor
+    if (birim === "kg" && kg != null) {
+      kgUrunAdlari.add(ad);
       toplamKg += kg;
       gunMap.set(g, (gunMap.get(g) ?? 0) + kg);
-      ayMap.set(a, (ayMap.get(a) ?? 0) + kg);
+      as.kgToplam = yuvarla(as.kgToplam + kg);
     }
   }
 
   const gunluk = [...gunMap.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([tarih, kg]) => ({ tarih, kg: yuvarla(kg) }));
-
   const uretimGunu = gunluk.filter((g) => g.kg > 0).length;
+
+  const buAy = bugun.slice(0, 7);
 
   return {
     toplamKg: yuvarla(toplamKg),
-    toplamAdet: yuvarla(toplamAdet),
+    kgUrunAdlari: [...kgUrunAdlari].sort((a, b) => a.localeCompare(b, "tr")),
     kayitSayisi: kayitlar.length,
     adetliKayitSayisi: kgsizKayitlar(kayitlar).length,
     bugunKg: yuvarla(gunMap.get(bugun) ?? 0),
-    bugunAdet: yuvarla(gunAdetMap.get(bugun) ?? 0),
-    buAyKg: yuvarla(ayMap.get(bugun.slice(0, 7)) ?? 0),
-    buAyAdet: yuvarla(ayAdetMap.get(bugun.slice(0, 7)) ?? 0),
+    buAyKg: yuvarla(ayMap.get(buAy)?.kgToplam ?? 0),
     gunlukOrtalamaKg: uretimGunu ? yuvarla(toplamKg / uretimGunu) : null,
     uretimGunuSayisi: uretimGunu,
-    urunler: kir(kayitlar, (k) => k.urun_ad || k.urun_kod),
+    urunOzetleri: [...urunMap.values()].sort(
+      // Kilogramlılar önce (ana ürün), sonra miktara göre
+      (a, b) =>
+        Number(b.birim === "kg") - Number(a.birim === "kg") ||
+        b.kg - a.kg ||
+        b.deger - a.deger,
+    ),
     gruplar: kir(kayitlar, (k) => k.urun_grup),
     ambalajlar: kir(kayitlar, (k) => k.ambalaj_tipi),
     gunluk,
-    aylik: [...ayMap.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([ay, kg]) => ({ ay, kg: yuvarla(kg) })),
+    aylik: [...ayMap.values()].sort((a, b) => a.ay.localeCompare(b.ay)),
   };
 }
+
+// ─── Yazım ────────────────────────────────────────────────────────────────
 
 /** kg'ı okunur yazar: 1234.5 → "1.234,5 kg" */
 export function kgYaz(n: number | null | undefined): string {
@@ -223,6 +464,16 @@ export function adetYaz(n: number | null | undefined): string {
   return n.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
 }
 
+/** Sayıyı, ürünün raporlama biriminde yazar: "9.646 paket", "55.267 kg" */
+export function birimliYaz(deger: number | null | undefined, birim: RaporBirimi): string {
+  if (deger == null) return "—";
+  if (birim === "kg") return kgYaz(deger);
+  const ondalikli = Math.abs(deger % 1) > 0.001;
+  return (
+    deger.toLocaleString("tr-TR", { maximumFractionDigits: ondalikli ? 1 : 0 }) + " " + birim
+  );
+}
+
 /**
  * Bir kırılım satırının okunur karşılığı.
  * Kilogramı olan "1.234 kg", olmayan "300 adet" gösterir.
@@ -234,21 +485,46 @@ export function miktarYaz(k: Pick<Kirilim, "kg" | "adet">): string {
   return parcalar.join(" + ") || "—";
 }
 
-export function uretimCsv(kayitlar: UretimKaydi[]): string {
+export function uretimCsv(kayitlar: UretimKaydi[], urunler: Urun[] = []): string {
+  const harita = urunHaritasi(urunler);
   const basliklar = [
     "Tarih", "Ürün Kodu", "Ürün Adı", "Ürün Grubu",
-    "Ambalaj Tipi", "Miktar", "Ölçü Birimi", "Kg Karşılığı", "Parti No",
+    "Ambalaj Tipi", "Miktar", "Ölçü Birimi", "Kg Karşılığı",
+    "Rapor Miktarı", "Rapor Birimi", "Parti No",
     "SKT", "Operatör", "Açıklama",
   ];
   const kacir = (v: unknown) => {
     const s = String(v ?? "").replace(/"/g, '""');
     return /[";\n]/.test(s) ? `"${s}"` : s;
   };
-  const satirlar = kayitlar.map((k) =>
-    [
+  const satirlar = kayitlar.map((k) => {
+    const urun = kayitUrunu(k, harita);
+    return [
       k.tarih, k.urun_kod, k.urun_ad, k.urun_grup,
-      k.ambalaj_tipi, k.miktar, k.olcu_birimi, k.kg_karsiligi ?? "", k.parti_no,
+      k.ambalaj_tipi, k.miktar, k.olcu_birimi, k.kg_karsiligi ?? "",
+      raporMiktari(k, urun) ?? "", raporEtiketi(urun), k.parti_no,
       k.skt ?? "", k.operator, k.aciklama,
+    ].map(kacir).join(";");
+  });
+  return "﻿" + [basliklar.join(";"), ...satirlar].join("\r\n");
+}
+
+/** Aylık üretim + satış tablosunun CSV'si. */
+export function aylikCsv(aylik: AylikSatir[], urunOzetleri: UrunOzet[]): string {
+  const kacir = (v: unknown) => {
+    const s = String(v ?? "").replace(/"/g, '""');
+    return /[";\n]/.test(s) ? `"${s}"` : s;
+  };
+  const basliklar = [
+    "Ay",
+    ...urunOzetleri.map((u) => `${u.ad} (${u.etiket})`),
+    "Şube satışı (kg)",
+  ];
+  const satirlar = aylik.map((a) =>
+    [
+      a.etiket,
+      ...urunOzetleri.map((u) => a.urunler[u.ad] ?? ""),
+      a.satisKg ?? "",
     ].map(kacir).join(";"),
   );
   return "﻿" + [basliklar.join(";"), ...satirlar].join("\r\n");

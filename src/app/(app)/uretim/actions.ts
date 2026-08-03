@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
-import { kilogramaCevir, OLCU_BIRIMLERI, type Urun } from "@/lib/uretim";
+import {
+  kilogramaCevir, OLCU_BIRIMLERI, RAPOR_BIRIMLERI, type Urun,
+} from "@/lib/uretim";
 
 type Sonuc = { hata?: string; ok?: string };
 const YOL = "/uretim";
@@ -11,6 +13,11 @@ const YOL = "/uretim";
 const m = (f: FormData, a: string) => String(f.get(a) ?? "").trim();
 
 function tabloHatasi(mesaj: string): string | null {
+  // Raporlama birimi sütunları 0021 ile geliyor. Genel "schema cache"
+  // mesajından önce bakılıyor, yoksa kullanıcı yanlış migration'a yönlenir.
+  if (/rapor_birimi|rapor_bolen/i.test(mesaj)) {
+    return "Raporlama birimi sütunları henüz yok — 0021_urun_rapor_birimi.sql Supabase'de çalıştırılmalı.";
+  }
   if (/relation .* does not exist/i.test(mesaj) || /schema cache/i.test(mesaj)) {
     return "Üretim tabloları henüz oluşturulmamış — 0013_uretim.sql çalıştırılmalı.";
   }
@@ -173,6 +180,17 @@ export async function urunKaydet(_o: Sonuc | null, formData: FormData): Promise<
     return Number.isFinite(n) && n > 0 ? n : null;
   };
 
+  // Raporlama birimi: ürünün raporlarda hangi birimde görüneceği.
+  // Girişte kullanılan ölçü biriminden bağımsız (bkz. @/lib/uretim).
+  const raporBirimiHam = m(formData, "rapor_birimi").toLowerCase();
+  const raporBirimi = (RAPOR_BIRIMLERI as readonly string[]).includes(raporBirimiHam)
+    ? raporBirimiHam
+    : "kg";
+  // kg ve adet raporlamasında bölen anlamsız — 1'e sabitleniyor ki ekranda
+  // yanlışlıkla girilen bir sayı sessizce hesaba karışmasın.
+  const raporBolen =
+    raporBirimi === "kg" || raporBirimi === "adet" ? 1 : sayi("rapor_bolen") ?? 1;
+
   const alanlar = {
     kod,
     ad,
@@ -182,6 +200,8 @@ export async function urunKaydet(_o: Sonuc | null, formData: FormData): Promise<
     birim_agirlik_kg: sayi("birim_agirlik_kg"),
     koli_adedi: sayi("koli_adedi"),
     raf_omru_gun: sayi("raf_omru_gun"),
+    rapor_birimi: raporBirimi,
+    rapor_bolen: raporBolen,
     aktif: formData.get("aktif") === "on",
     updated_at: new Date().toISOString(),
   };
@@ -198,10 +218,18 @@ export async function urunKaydet(_o: Sonuc | null, formData: FormData): Promise<
   }
 
   revalidatePath(YOL);
+  const birimAciklama =
+    raporBirimi === "kg"
+      ? "kilogram"
+      : raporBolen > 1
+      ? `${raporBirimi} (1 ${raporBirimi} = ${raporBolen} adet)`
+      : raporBirimi;
   return {
-    ok: alanlar.birim_agirlik_kg
-      ? "Ürün kaydedildi"
-      : "Ürün kaydedildi. Birim ağırlık girilmedi — bu ürünün üretimi kilogram yerine ADET olarak toplanacak (lavaş gibi ürünler için normaldir).",
+    ok:
+      `Ürün kaydedildi. Raporlarda ${birimAciklama} olarak görünecek` +
+      (raporBirimi === "kg" && !alanlar.birim_agirlik_kg
+        ? " — ancak birim ağırlık girilmediği için kilogram hesaplanamayacak."
+        : ". Bu değişiklik geçmiş kayıtlara da uygulanır."),
   };
 }
 

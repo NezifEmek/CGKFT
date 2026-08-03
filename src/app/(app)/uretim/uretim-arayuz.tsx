@@ -6,8 +6,12 @@ import {
   type AktarSatir,
 } from "./actions";
 import {
-  uretimOzeti, uretimCsv, kgYaz, adetYaz, miktarYaz, kilogramaCevir, basligiTani,
-  OLCU_BIRIMLERI, AMBALAJ_BIRIMLERI, type Urun, type UretimKaydi, type Kirilim,
+  uretimOzeti, uretimCsv, aylikCsv, kgYaz, adetYaz, miktarYaz, birimliYaz,
+  kilogramaCevir, basligiTani, raporMiktari, raporBirimi, raporBolen,
+  raporAciklama, urunHaritasi, kayitUrunu,
+  OLCU_BIRIMLERI, AMBALAJ_BIRIMLERI, RAPOR_BIRIMLERI,
+  type Urun, type UretimKaydi, type Kirilim, type UrunOzet,
+  type AylikSatir, type SatisSatiri,
 } from "@/lib/uretim";
 import { YazdirDugmesi } from "@/components/yazdir-dugmesi";
 
@@ -29,7 +33,7 @@ export interface Tanim {
 
 // Tesis / hat / vardiya kaldırıldı (Nezif: "bu yapıda gerek yok"), o yüzden
 // "Tanımlar" sekmesi de yok — içinde sadece o üç liste vardı.
-type Sekme = "panel" | "giris" | "kayitlar" | "urunler";
+type Sekme = "panel" | "aylik" | "giris" | "kayitlar" | "urunler";
 
 function tarihYaz(t: string | null | undefined): string {
   if (!t) return "";
@@ -38,13 +42,15 @@ function tarihYaz(t: string | null | undefined): string {
 }
 
 export function UretimArayuz({
-  kayitlar, urunler, bugun, yazabilir, yonetimMi, tabloYok,
+  kayitlar, urunler, satislar, bugun, yazabilir, yonetimMi, tumSubeleriGorur, tabloYok,
 }: {
   kayitlar: UretimKaydi[];
   urunler: Urun[];
+  satislar: SatisSatiri[];
   bugun: string;
   yazabilir: boolean;
   yonetimMi: boolean;
+  tumSubeleriGorur: boolean;
   tabloYok: boolean;
 }) {
   const [sekme, setSekme] = useState<Sekme>("panel");
@@ -92,7 +98,13 @@ export function UretimArayuz({
     });
   }, [kayitlar, fBas, fBit, fUrun, fGrup, fAmbalaj, fParti]);
 
-  const ozet = useMemo(() => uretimOzeti(listelenen, bugun), [listelenen, bugun]);
+  const ozet = useMemo(
+    () => uretimOzeti(listelenen, urunler, bugun, satislar),
+    [listelenen, urunler, bugun, satislar],
+  );
+
+  // Kayıtlar tablosunda her satırın kendi raporlama birimini yazabilmek için
+  const uHarita = useMemo(() => urunHaritasi(urunler), [urunler]);
 
   const filtreVar = fBas || fBit || fUrun || fGrup || fAmbalaj || fParti;
 
@@ -129,12 +141,22 @@ export function UretimArayuz({
     );
   }
 
-  function csvIndir() {
+  function indir(icerik: string, dosyaAdi: string) {
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([uretimCsv(listelenen)], { type: "text/csv;charset=utf-8" }));
-    a.download = `uretim-${bugun}.csv`;
+    a.href = URL.createObjectURL(new Blob([icerik], { type: "text/csv;charset=utf-8" }));
+    a.download = dosyaAdi;
     a.click();
     URL.revokeObjectURL(a.href);
+  }
+
+  function csvIndir() {
+    // Aylık sekmesindeyken aylık tablo, diğerlerinde ham kayıtlar insin —
+    // kullanıcı ekranda ne görüyorsa onu indirmeyi bekliyor.
+    if (sekme === "aylik") {
+      indir(aylikCsv(ozet.aylik, ozet.urunOzetleri), `uretim-aylik-${bugun}.csv`);
+    } else {
+      indir(uretimCsv(listelenen, urunler), `uretim-${bugun}.csv`);
+    }
   }
 
   return (
@@ -149,7 +171,8 @@ export function UretimArayuz({
       <div className="flex flex-wrap gap-2">
         <div className="flex rounded-lg border border-neutral-300 dark:border-neutral-700 overflow-hidden">
           {([
-            ["panel", "📊 Panel"], ["giris", "✏️ Üretim Girişi"], ["kayitlar", "📋 Kayıtlar"],
+            ["panel", "📊 Panel"], ["aylik", "🗓 Aylık & Satış"],
+            ["giris", "✏️ Üretim Girişi"], ["kayitlar", "📋 Kayıtlar"],
             ["urunler", "📦 Ürünler"],
           ] as const).map(([k, e]) => (
             <button
@@ -166,7 +189,7 @@ export function UretimArayuz({
             </button>
           ))}
         </div>
-        {(sekme === "panel" || sekme === "kayitlar") && (
+        {(sekme === "panel" || sekme === "aylik" || sekme === "kayitlar") && (
           <span className="ml-auto flex gap-2">
             <button type="button" onClick={csvIndir} className={btnSade}>
               ⬇ Excel (CSV)
@@ -212,59 +235,69 @@ export function UretimArayuz({
       {/* ── PANEL ─────────────────────────────────────────────────── */}
       {sekme === "panel" && (
         <div className="space-y-4">
-          {/* Toplam TEK sayı değil: kilogramla ölçülenler kg, lavaş gibi
-              ölçülmeyenler adet olarak ayrı toplanıyor. İkisini birleştirmek
-              anlamsız olurdu. */}
+          {/* Üstteki kartlar YALNIZCA kilogramla raporlanan ürünleri gösterir.
+              Lavaşı paket, sosları adet raporlarken hepsini tek bir kg
+              toplamında birleştirmek yanıltıcı olurdu — diğer ürünler
+              aşağıda ve "Aylık & Satış" sekmesinde kendi biriminde duruyor. */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {[
-              { kg: ozet.bugunKg, adet: ozet.bugunAdet, e: "Bugünkü üretim" },
-              { kg: ozet.buAyKg, adet: ozet.buAyAdet, e: "Bu ay" },
-              { kg: ozet.toplamKg, adet: ozet.toplamAdet, e: "Seçili dönem toplamı" },
+              { kg: ozet.bugunKg, e: "Bugünkü üretim" },
+              { kg: ozet.buAyKg, e: "Bu ay" },
+              { kg: ozet.toplamKg, e: "Seçili dönem toplamı" },
               {
                 kg: ozet.gunlukOrtalamaKg ?? 0,
-                adet: 0,
                 e: `Günlük ortalama (${ozet.uretimGunuSayisi} gün)`,
               },
             ].map((x) => (
               <div key={x.e} className={kart + " p-3 text-center"}>
                 <div className="text-base font-extrabold">{kgYaz(x.kg)}</div>
-                {x.adet > 0 && (
-                  <div className="text-sm font-semibold text-neutral-600 dark:text-neutral-400">
-                    + {adetYaz(x.adet)} adet
-                  </div>
-                )}
                 <div className="text-[10px] text-neutral-500">{x.e}</div>
               </div>
             ))}
           </div>
 
+          <p className="text-[11px] text-neutral-500">
+            Yukarıdaki dört kutu yalnızca <b>kilogram olarak raporlanan</b> ürünleri
+            toplar
+            {ozet.kgUrunAdlari.length ? ` (${ozet.kgUrunAdlari.join(", ")})` : ""}. Lavaş
+            paket, soslar paket/adet raporlandığı için aynı toplama katılmaz — hepsi
+            aşağıdaki listede ve &quot;Aylık &amp; Satış&quot; sekmesinde kendi biriminde
+            görünür.
+          </p>
+
           {ozet.adetliKayitSayisi > 0 && (
             <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3 text-sm text-neutral-600 dark:text-neutral-400">
-              {ozet.adetliKayitSayisi} kayıt <b>adet</b> olarak sayılıyor — bu ürünlerin
-              kilogram karşılığı tanımlı değil (lavaş gibi ürünlerde normaldir). Kilogramla
-              toplanmaları gerekiyorsa Ürünler sekmesinden birim ağırlık girin.
+              {ozet.adetliKayitSayisi} kaydın kilogram karşılığı hesaplanamıyor — bu
+              ürünlerde birim ağırlık tanımlı değil. Raporlama birimi kilogram değilse
+              sorun yok; kilogram da görmek isterseniz Ürünler sekmesinden birim ağırlık
+              girin.
             </div>
           )}
 
           {ozet.gunluk.length > 0 && (
             <div className={kart + " p-4"}>
-              <h3 className="text-sm font-semibold mb-3">Günlük üretim trendi</h3>
+              <h3 className="text-sm font-semibold mb-1">Günlük üretim trendi</h3>
+              <p className="text-[11px] text-neutral-500 mb-3">
+                Kilogram bazlı ürünler
+                {ozet.kgUrunAdlari.length ? `: ${ozet.kgUrunAdlari.join(", ")}` : ""}
+              </p>
               <Trend veri={ozet.gunluk.slice(-30).map((g) => ({ etiket: g.tarih.slice(5), deger: g.kg }))} />
             </div>
           )}
 
           <div className="grid md:grid-cols-3 gap-3">
-            <Dagilim baslik="Ürün bazında" veri={ozet.urunler} />
-            <Dagilim baslik="Ürün grubu bazında" veri={ozet.gruplar} />
-            <Dagilim baslik="Ambalaj bazında" veri={ozet.ambalajlar} />
+            <UrunDagilimi veri={ozet.urunOzetleri} />
+            <Dagilim
+              baslik="Ürün grubu bazında"
+              altBaslik="kilogram bazında — gruptaki ürünler farklı birimlerde raporlanabilir"
+              veri={ozet.gruplar}
+            />
+            <Dagilim
+              baslik="Ambalaj bazında"
+              altBaslik="kilogram bazında"
+              veri={ozet.ambalajlar}
+            />
           </div>
-
-          {ozet.aylik.length > 1 && (
-            <div className={kart + " p-4"}>
-              <h3 className="text-sm font-semibold mb-3">Aylık üretim</h3>
-              <Trend veri={ozet.aylik.map((a) => ({ etiket: a.ay.slice(2), deger: a.kg }))} />
-            </div>
-          )}
 
           {!ozet.kayitSayisi && (
             <div className={kart + " text-center text-sm text-neutral-400 py-10"}>
@@ -272,6 +305,15 @@ export function UretimArayuz({
             </div>
           )}
         </div>
+      )}
+
+      {/* ── AYLIK & SATIŞ ─────────────────────────────────────────── */}
+      {sekme === "aylik" && (
+        <AylikTablo
+          aylik={ozet.aylik}
+          urunOzetleri={ozet.urunOzetleri}
+          tumSubeleriGorur={tumSubeleriGorur}
+        />
       )}
 
       {/* ── ÜRETİM GİRİŞİ ─────────────────────────────────────────── */}
@@ -303,8 +345,9 @@ export function UretimArayuz({
           <div className="px-3 py-2 text-xs border-b border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center gap-2">
             <span className="text-neutral-500">{listelenen.length} kayıt</span>
             <span className="font-medium">
-              Toplam {kgYaz(ozet.toplamKg)}
-              {ozet.toplamAdet > 0 ? ` + ${adetYaz(ozet.toplamAdet)} adet` : ""}
+              {ozet.urunOzetleri
+                .map((u) => `${u.ad}: ${birimliYaz(u.deger, u.birim)}`)
+                .join("  ·  ") || "—"}
             </span>
 
             {yazabilir && listelenen.length > 0 && (
@@ -354,13 +397,16 @@ export function UretimArayuz({
                       />
                     </th>
                   )}
-                  {["Tarih", "Ürün", "Ambalaj", "Miktar", "Kg", "Parti", "Operatör", ""].map((b) => (
+                  {["Tarih", "Ürün", "Ambalaj", "Girilen", "Rapor birimiyle", "Kg", "Parti", "Operatör", ""].map((b) => (
                     <th key={b} className="text-left font-medium px-3 py-2 whitespace-nowrap">{b}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {listelenen.map((k) => (
+                {listelenen.map((k) => {
+                  const kUrun = kayitUrunu(k, uHarita);
+                  const kRapor = raporMiktari(k, kUrun);
+                  return (
                   <tr
                     key={k.id}
                     className={`border-t border-neutral-100 dark:border-neutral-800 ${
@@ -381,17 +427,21 @@ export function UretimArayuz({
                     <td className="px-3 py-2 whitespace-nowrap">{tarihYaz(k.tarih)}</td>
                     <td className="px-3 py-2">{k.urun_ad}</td>
                     <td className="px-3 py-2 text-neutral-500">{k.ambalaj_tipi || "—"}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
+                    <td className="px-3 py-2 whitespace-nowrap text-neutral-500">
                       {Number(k.miktar).toLocaleString("tr-TR")} {k.olcu_birimi}
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap font-medium">
-                      {k.kg_karsiligi == null ? (
-                        <span className="text-neutral-400 text-xs" title="Bu ürün adet olarak sayılıyor">
-                          adet bazlı
-                        </span>
+                    <td
+                      className="px-3 py-2 whitespace-nowrap font-medium"
+                      title={raporAciklama(kUrun)}
+                    >
+                      {kRapor == null ? (
+                        <span className="text-amber-600 text-xs">çevrilemedi</span>
                       ) : (
-                        kgYaz(Number(k.kg_karsiligi))
+                        birimliYaz(kRapor, raporBirimi(kUrun))
                       )}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-neutral-500 text-xs">
+                      {k.kg_karsiligi == null ? "—" : kgYaz(Number(k.kg_karsiligi))}
                     </td>
                     <td className="px-3 py-2 text-neutral-500 text-xs">{k.parti_no || "—"}</td>
                     <td className="px-3 py-2 text-neutral-500 text-xs">{k.operator || "—"}</td>
@@ -415,7 +465,8 @@ export function UretimArayuz({
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -435,7 +486,7 @@ export function UretimArayuz({
               <table className="w-full text-sm">
                 <thead className="bg-neutral-50 dark:bg-neutral-800/60 text-xs text-neutral-500">
                   <tr>
-                    {["Kod", "Ad", "Grup", "Ambalaj", "Birim ağırlık", "Koli adedi", ""].map((b) => (
+                    {["Kod", "Ad", "Grup", "Raporlama birimi", "Ambalaj", "Birim ağırlık", "Koli adedi", ""].map((b) => (
                       <th key={b} className="text-left font-medium px-3 py-2 whitespace-nowrap">{b}</th>
                     ))}
                   </tr>
@@ -451,6 +502,12 @@ export function UretimArayuz({
                           {!u.aktif && <span className="text-[10px] text-neutral-400 ml-1">(pasif)</span>}
                         </td>
                         <td className="px-3 py-2 text-neutral-500">{u.grup || "—"}</td>
+                        <td className="px-3 py-2">
+                          <span className="font-medium">{raporBirimi(u)}</span>
+                          <span className="block text-[10px] text-neutral-500">
+                            {raporAciklama(u)}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 text-neutral-500">{u.ambalaj_tipi || "—"}</td>
                         <td className="px-3 py-2">
                           {eksik ? (
@@ -528,11 +585,12 @@ export function UretimArayuz({
                 </A>
               </div>
               <p className="text-[11px] text-neutral-500">
-                Birim ağırlık <b>zorunlu değil</b>. Girilirse üretim kilograma çevrilip kg
-                toplamına, girilmezse <b>adet</b> toplamına yazılır — lavaş gibi kilogramla
-                ölçülmeyen ürünlerde boş bırakın. Koli cinsinden giriş yapacaksanız koli adedi
-                gerekir.
+                Bu iki alan <b>girişi</b> ilgilendirir: birim ağırlık kilogram karşılığını,
+                koli adedi ise koli/kutu/paket girişlerinin adede çevrilmesini sağlar.
+                Raporda hangi birimin görüneceğini aşağıdaki bölüm belirler.
               </p>
+
+              <RaporBirimiAlani urun={duzenlenenUrun} />
               <A e="Raf ömrü (gün)">
                 <input name="raf_omru_gun" inputMode="numeric" defaultValue={duzenlenenUrun?.raf_omru_gun ?? ""} className={gir + " w-full"} />
               </A>
@@ -558,6 +616,221 @@ function A({ e, children }: { e: string; children: React.ReactNode }) {
       <span className="block text-xs text-neutral-500 mb-1">{e}</span>
       {children}
     </label>
+  );
+}
+
+// ─── Ürün formunun raporlama birimi bölümü ────────────────────────────────
+//
+// Ayrı bileşen çünkü seçilen birime göre "bölen" alanının görünürlüğü ve
+// açıklama metni anlık değişiyor; formun geri kalanı kontrolsüz (defaultValue).
+
+function RaporBirimiAlani({ urun }: { urun: Urun | null }) {
+  const [birim, setBirim] = useState<string>(raporBirimi(urun));
+  const [bolen, setBolen] = useState<string>(String(raporBolen(urun)));
+
+  const bolenGerekli = birim === "paket" || birim === "koli";
+  const bolenSayi = Number(bolen.replace(",", ".")) || 1;
+
+  return (
+    <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3 space-y-2">
+      <div className="text-xs font-semibold">Raporlarda nasıl görünsün?</div>
+      <div className="grid grid-cols-2 gap-2">
+        <A e="Raporlama birimi">
+          <select
+            name="rapor_birimi"
+            value={birim}
+            onChange={(e) => setBirim(e.target.value)}
+            className={gir + " w-full"}
+          >
+            {RAPOR_BIRIMLERI.map((b) => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+        </A>
+        {bolenGerekli && (
+          <A e={`Bir ${birim}te kaç adet?`}>
+            <input
+              name="rapor_bolen"
+              inputMode="decimal"
+              value={bolen}
+              onChange={(e) => setBolen(e.target.value)}
+              className={gir + " w-full"}
+            />
+          </A>
+        )}
+        {/* Bölen gizliyken de gönderilsin ki sunucu 1'e sabitlerken
+            eksik alan hatası almasın. */}
+        {!bolenGerekli && <input type="hidden" name="rapor_bolen" value="1" />}
+      </div>
+      <p className="text-[11px] text-neutral-500">
+        {birim === "kg" ? (
+          <>
+            Üretim <b>kilogram</b> olarak raporlanır. Birim ağırlık girilmiş olmalı.
+          </>
+        ) : bolenGerekli && bolenSayi > 1 ? (
+          <>
+            Üretim <b>{birim}</b> olarak raporlanır: <b>1 {birim} = {adetYaz(bolenSayi)} adet</b>.
+            Giriş adet, koli veya kg yapılsa da rapor {birim} çıkar.
+          </>
+        ) : (
+          <>
+            Üretim <b>{birim}</b> olarak raporlanır.
+          </>
+        )}{" "}
+        Bu ayar <b>geçmiş kayıtlara da</b> uygulanır — değiştirdiğinizde eski aylar da
+        yeni birimde görünür.
+      </p>
+    </div>
+  );
+}
+
+// ─── Aylık üretim + satış tablosu ─────────────────────────────────────────
+
+function AylikTablo({
+  aylik, urunOzetleri, tumSubeleriGorur,
+}: {
+  aylik: AylikSatir[];
+  urunOzetleri: UrunOzet[];
+  tumSubeleriGorur: boolean;
+}) {
+  // Satış rakamı çiğköfte kilogramı; karşılaştırma da kilogram bazlı ürünle
+  // yapılabilir. Hangi ürünün karşılaştırılacağını sabitlemek yerine kg
+  // raporlanan ilk ürün seçiliyor.
+  const kgUrun = urunOzetleri.find((u) => u.birim === "kg") ?? null;
+  const satisVar = aylik.some((a) => a.satisKg != null);
+
+  if (!aylik.length) {
+    return (
+      <div className={kart + " text-center text-sm text-neutral-400 py-10"}>
+        Seçili filtreye uyan üretim kaydı yok.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className={kart + " overflow-hidden"}>
+        <div className="px-3 py-2 border-b border-neutral-100 dark:border-neutral-800">
+          <h3 className="text-sm font-semibold">Aylık üretim ve satış</h3>
+          <p className="text-[11px] text-neutral-500">
+            Her ürün kendi raporlama biriminde. Satış sütunu{" "}
+            <b>şubelerin o ay sattığı çiğköfte kilogramı</b>
+            {tumSubeleriGorur ? "" : " — yalnızca görme yetkiniz olan şubeler"}.
+          </p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-neutral-50 dark:bg-neutral-800/60 text-xs text-neutral-500">
+              <tr>
+                <th className="text-left font-medium px-3 py-2 whitespace-nowrap">Ay</th>
+                {urunOzetleri.map((u) => (
+                  <th key={u.ad} className="text-right font-medium px-3 py-2 whitespace-nowrap">
+                    {u.ad}
+                    <span className="block text-[10px] font-normal text-neutral-400">
+                      {u.etiket}
+                    </span>
+                  </th>
+                ))}
+                <th className="text-right font-medium px-3 py-2 whitespace-nowrap border-l border-neutral-200 dark:border-neutral-700">
+                  Şube satışı
+                  <span className="block text-[10px] font-normal text-neutral-400">
+                    çiğköfte kg
+                  </span>
+                </th>
+                {kgUrun && (
+                  <th className="text-right font-medium px-3 py-2 whitespace-nowrap">
+                    Üretim / satış
+                    <span className="block text-[10px] font-normal text-neutral-400">
+                      {kgUrun.ad}
+                    </span>
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {aylik.map((a) => {
+                const uretimKg = a.kgToplam;
+                const oran =
+                  a.satisKg && a.satisKg > 0 ? (uretimKg / a.satisKg) * 100 : null;
+                return (
+                  <tr key={a.ay} className="border-t border-neutral-100 dark:border-neutral-800">
+                    <td className="px-3 py-2 whitespace-nowrap font-medium">{a.etiket}</td>
+                    {urunOzetleri.map((u) => {
+                      const v = a.urunler[u.ad];
+                      return (
+                        <td key={u.ad} className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
+                          {v == null ? (
+                            <span className="text-neutral-300 dark:text-neutral-600">—</span>
+                          ) : (
+                            birimliYaz(v, u.birim)
+                          )}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums border-l border-neutral-200 dark:border-neutral-700">
+                      {a.satisKg == null ? (
+                        <span
+                          className="text-neutral-300 dark:text-neutral-600"
+                          title="Bu ayın şube satışı henüz girilmemiş"
+                        >
+                          —
+                        </span>
+                      ) : (
+                        kgYaz(a.satisKg)
+                      )}
+                    </td>
+                    {kgUrun && (
+                      <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
+                        {oran == null ? (
+                          <span className="text-neutral-300 dark:text-neutral-600">—</span>
+                        ) : (
+                          `%${oran.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot className="bg-neutral-50 dark:bg-neutral-800/60 text-xs">
+              <tr className="border-t border-neutral-200 dark:border-neutral-700 font-semibold">
+                <td className="px-3 py-2">Toplam</td>
+                {urunOzetleri.map((u) => (
+                  <td key={u.ad} className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
+                    {birimliYaz(u.deger, u.birim)}
+                  </td>
+                ))}
+                <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums border-l border-neutral-200 dark:border-neutral-700">
+                  {satisVar
+                    ? kgYaz(aylik.reduce((t, a) => t + (a.satisKg ?? 0), 0))
+                    : "—"}
+                </td>
+                {kgUrun && <td />}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 p-3 text-[11px] text-neutral-500 space-y-1">
+        <div>
+          <b>Birimler:</b>{" "}
+          {urunOzetleri.map((u) => `${u.ad} → ${u.aciklama}`).join("  ·  ")}
+        </div>
+        <div>
+          <b>Satış sütunu:</b> şubelerin aylık kg satışı. Üretim merkez tesiste, satış
+          şubelerde gerçekleştiği için ay ay birebir eşleşmesi beklenmez — üretilen
+          ürünün şubeye ulaşıp satılması zaman alır. Boş görünen ay, o ayın satış
+          verisinin henüz girilmediği anlamına gelir.
+        </div>
+        {!satisVar && (
+          <div className="text-amber-700 dark:text-amber-400">
+            Bu dönemde hiç satış verisi bulunamadı.
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -777,7 +1050,63 @@ function TopluAktarma({ urunler }: { urunler: Urun[] }) {
 
 // ─── Ortak görseller ──────────────────────────────────────────────────────
 
-function Dagilim({ baslik, veri, limit = 10 }: { baslik: string; veri: Kirilim[]; limit?: number }) {
+/**
+ * Ürün bazında dağılım — her satır KENDİ raporlama biriminde.
+ *
+ * Çubuklar bilerek ortak ölçeğe vurulmuyor: 55.267 kg çiğköfte ile 9.646
+ * paket lavaşı aynı çubukta kıyaslamak yanıltıcı olurdu. Her çubuk kendi
+ * biriminin en büyüğüne göre çiziliyor, yani "bu birimde en çok üretilen
+ * hangisi" sorusunu cevaplıyor.
+ */
+function UrunDagilimi({ veri }: { veri: UrunOzet[] }) {
+  if (!veri.length) return null;
+  const enBuyuk = new Map<string, number>();
+  for (const u of veri) {
+    enBuyuk.set(u.birim, Math.max(enBuyuk.get(u.birim) ?? 1, u.deger));
+  }
+
+  return (
+    <div className={kart + " p-4"}>
+      <h3 className="text-sm font-semibold mb-1">Ürün bazında</h3>
+      <p className="text-[11px] text-neutral-500 mb-3">her ürün kendi biriminde</p>
+      <ul className="space-y-2">
+        {veri.map((u) => (
+          <li key={u.ad} className="text-sm">
+            <div className="flex justify-between gap-2">
+              <span className="truncate min-w-0">{u.ad}</span>
+              <span className="shrink-0 font-medium">{birimliYaz(u.deger, u.birim)}</span>
+            </div>
+            <div className="text-[10px] text-neutral-400 mb-0.5">{u.aciklama}</div>
+            <div className="h-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+              <div
+                className={
+                  u.birim === "kg"
+                    ? "h-full bg-neutral-900 dark:bg-neutral-100"
+                    : "h-full bg-neutral-400"
+                }
+                style={{ width: `${(u.deger / (enBuyuk.get(u.birim) || 1)) * 100}%` }}
+              />
+            </div>
+            {u.cevrilemeyen > 0 && (
+              <div className="text-[10px] text-amber-600">
+                {u.cevrilemeyen} kayıt bu birime çevrilemedi
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Dagilim({
+  baslik, altBaslik, veri, limit = 10,
+}: {
+  baslik: string;
+  altBaslik?: string;
+  veri: Kirilim[];
+  limit?: number;
+}) {
   const satirlar = veri.slice(0, limit);
   if (!satirlar.length) return null;
 
@@ -788,7 +1117,8 @@ function Dagilim({ baslik, veri, limit = 10 }: { baslik: string; veri: Kirilim[]
 
   return (
     <div className={kart + " p-4"}>
-      <h3 className="text-sm font-semibold mb-3">{baslik}</h3>
+      <h3 className="text-sm font-semibold mb-1">{baslik}</h3>
+      {altBaslik && <p className="text-[11px] text-neutral-500 mb-3">{altBaslik}</p>}
       <ul className="space-y-1.5">
         {satirlar.map((s) => {
           const adetliMi = s.kg === 0 && s.adet > 0;
