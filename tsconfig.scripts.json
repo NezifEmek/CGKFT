@@ -1,0 +1,15 @@
+// Tek seferlik yardımcı betiklerin tip kontrolü.
+//
+// Neden ayrı: bu betikler ana tsconfig'in dışında tutuluyor, çünkü
+// `next build` proje tsconfig'ini kullanıyor ve buradaki bir hata CANLI
+// YAYINI durduruyor. 2026-08-02'de tam olarak bu oldu: bir kerelik kadro
+// aktarma betiğindeki import hatası production dağıtımını düşürdü.
+//
+// Betikler elle çalıştırılıyor ve hataları anında görünüyor; uygulamanın
+// yayına çıkmasını engellemeleri için bir sebep yok. Yine de kontrolsüz
+// kalmasınlar diye: npm run tip-kontrol
+{
+  "extends": "./tsconfig.json",
+  "include": ["scripts/**/*.ts", "scripts/**/*.mts"],
+  "exclude": ["node_modules"]
+}
