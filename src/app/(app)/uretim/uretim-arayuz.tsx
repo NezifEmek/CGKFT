@@ -11,7 +11,7 @@ import {
   raporAciklama, urunHaritasi, kayitUrunu,
   OLCU_BIRIMLERI, AMBALAJ_BIRIMLERI, RAPOR_BIRIMLERI,
   type Urun, type UretimKaydi, type Kirilim, type UrunOzet,
-  type AylikSatir, type SatisSatiri,
+  type AylikSatir, type SatisSatiri, type UrunAylikSeri,
 } from "@/lib/uretim";
 import { excelTarihiCoz } from "@/lib/excel-tarih";
 import { YazdirDugmesi } from "@/components/yazdir-dugmesi";
@@ -299,6 +299,8 @@ export function UretimArayuz({
               veri={ozet.ambalajlar}
             />
           </div>
+
+          <UrunGrafikleri seriler={ozet.urunSerileri} />
 
           {!ozet.kayitSayisi && (
             <div className={kart + " text-center text-sm text-neutral-400 py-10"}>
@@ -1149,6 +1151,183 @@ function Dagilim({
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+// ─── Ürün başına yıllık üretim/satış grafiği ──────────────────────────────
+//
+// Renkler dataviz kılavuzunun doğrulanmış paletinden: üretim mavi (slot 1),
+// satış turuncu (slot 2). İkisi de açık ve koyu temada bütün kontrolleri
+// geçiyor (renk körlüğü ayrımı ΔE 24.7 / 26.8, hedef ≥8).
+//
+// Ürün kimliğini RENK DEĞİL BAŞLIK taşıyor. Yedi ürüne yedi ayrı renk
+// vermek küçük çoklu grafiklerde renk körlüğü eşiğini geçemiyor; renk
+// burada "üretim mi satış mı" sorusunu cevaplıyor ve yedi kartta da aynı
+// anlama geliyor.
+const URETIM_RENK = "var(--uretim-renk)";
+const SATIS_RENK = "var(--satis-renk)";
+
+function UrunGrafikleri({ seriler }: { seriler: UrunAylikSeri[] }) {
+  if (!seriler.length) return null;
+  const yil = seriler[0].yil;
+
+  return (
+    <section className="space-y-3 uretim-grafik">
+      <style>{`
+        .uretim-grafik { --uretim-renk:#2a78d6; --satis-renk:#eb6834; }
+        @media (prefers-color-scheme: dark) {
+          :root:where(:not([data-theme="light"])) .uretim-grafik {
+            --uretim-renk:#3987e5; --satis-renk:#d95926;
+          }
+        }
+        :root[data-theme="dark"] .uretim-grafik {
+          --uretim-renk:#3987e5; --satis-renk:#d95926;
+        }
+      `}</style>
+
+      <div>
+        <h3 className="text-sm font-semibold">Ürün bazında aylık üretim ve satış — {yil}</h3>
+        <p className="text-[11px] text-neutral-500">
+          Her ürün kendi raporlama biriminde. Koyu çubuk içinde bulunduğumuz aydır.
+        </p>
+      </div>
+
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+        {seriler.map((s) => (
+          <UrunGrafik key={s.ad} s={s} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function UrunGrafik({ s }: { s: UrunAylikSeri }) {
+  // Üretim ve satış aynı birimde (kg) olduğunda tek ölçek kullanılıyor —
+  // iki ayrı y ekseni çubukları kıyaslanamaz hale getirirdi.
+  const enBuyuk = Math.max(
+    1,
+    ...s.aylar.map((a) => Math.max(a.uretim ?? 0, a.satis ?? 0)),
+  );
+  const dolu = s.aylar.some((a) => a.uretim != null || a.satis != null);
+
+  return (
+    <div className={kart + " p-4 space-y-3"}>
+      <div>
+        <h4 className="text-sm font-semibold leading-tight">{s.ad}</h4>
+        <p className="text-[10px] text-neutral-500">{s.aciklama}</p>
+      </div>
+
+      {/* İki ana sayı: bu ay ve yıllık toplam */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-neutral-50 dark:bg-neutral-800/60 px-2.5 py-2">
+          <div className="text-[10px] text-neutral-500 leading-tight">Bu ay</div>
+          <div className="text-sm font-bold tabular-nums leading-tight">
+            {s.buAyUretim == null ? "—" : birimliYaz(s.buAyUretim, s.birim)}
+          </div>
+          {s.satisVar && (
+            <div className="text-[10px] tabular-nums" style={{ color: SATIS_RENK }}>
+              satış {s.buAySatis == null ? "—" : kgYaz(s.buAySatis)}
+            </div>
+          )}
+        </div>
+        <div className="rounded-lg bg-neutral-50 dark:bg-neutral-800/60 px-2.5 py-2">
+          <div className="text-[10px] text-neutral-500 leading-tight">{s.yil} toplamı</div>
+          <div className="text-sm font-bold tabular-nums leading-tight">
+            {birimliYaz(s.yillikUretim, s.birim)}
+          </div>
+          {s.satisVar && (
+            <div className="text-[10px] tabular-nums" style={{ color: SATIS_RENK }}>
+              satış {s.yillikSatis == null ? "—" : kgYaz(s.yillikSatis)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Çubuklar.
+          items-stretch ŞART: items-end olduğunda sütunlar etiket
+          yüksekliğine çöküyor, içteki flex-1 dolduracak yer bulamıyor ve
+          bütün çubuklar 2px'te kalıyordu (tarayıcıda ölçülerek görüldü). */}
+      {dolu ? (
+        <div className="flex items-stretch gap-[3px] h-28">
+          {s.aylar.map((a) => {
+            const uY = ((a.uretim ?? 0) / enBuyuk) * 100;
+            const sY = ((a.satis ?? 0) / enBuyuk) * 100;
+            const ipucu =
+              `${a.kisa} ${s.yil}\n` +
+              `Üretim: ${a.uretim == null ? "kayıt yok" : birimliYaz(a.uretim, s.birim)}` +
+              (s.satisVar
+                ? `\nSatış: ${a.satis == null ? "kayıt yok" : kgYaz(a.satis)}`
+                : "");
+            return (
+              <div
+                key={a.ay}
+                title={ipucu}
+                className="flex-1 flex flex-col items-center gap-1 min-w-0 group"
+              >
+                {/* 2px boşluklu bitişik çubuklar (dataviz: komşu dolgular
+                    arasında yüzey boşluğu) */}
+                <div className="flex-1 w-full flex items-end justify-center gap-[2px]">
+                  <div
+                    className="w-full max-w-[9px] rounded-t group-hover:opacity-80"
+                    style={{
+                      height: `${uY}%`,
+                      minHeight: a.uretim ? 2 : 0,
+                      backgroundColor: URETIM_RENK,
+                      opacity: a.buAy ? 1 : 0.75,
+                    }}
+                  />
+                  {s.satisVar && (
+                    <div
+                      className="w-full max-w-[9px] rounded-t group-hover:opacity-80"
+                      style={{
+                        height: `${sY}%`,
+                        minHeight: a.satis ? 2 : 0,
+                        backgroundColor: SATIS_RENK,
+                        opacity: a.buAy ? 1 : 0.75,
+                      }}
+                    />
+                  )}
+                </div>
+                {/* 12 ay dar bir karta sığacak: etiket 9px ve taşmasın diye
+                    kırpılmadan ortalanıyor. */}
+                <span
+                  className={`text-[9px] leading-[12px] h-3 w-full text-center overflow-hidden ${
+                    a.buAy
+                      ? "font-bold text-neutral-800 dark:text-neutral-100"
+                      : "text-neutral-400"
+                  }`}
+                >
+                  {a.kisa}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="h-24 flex items-center justify-center text-xs text-neutral-400">
+          {s.yil} yılında kayıt yok
+        </div>
+      )}
+
+      {/* Açıklayıcı — iki seri varsa zorunlu */}
+      {s.satisVar ? (
+        <div className="flex items-center gap-3 text-[10px] text-neutral-500">
+          <span className="flex items-center gap-1">
+            <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: URETIM_RENK }} />
+            Üretim
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: SATIS_RENK }} />
+            Şube satışı
+          </span>
+        </div>
+      ) : (
+        <p className="text-[10px] text-neutral-400">
+          Bu ürün için satış verisi tutulmuyor — sistemde yalnızca çiğköfte kilogram
+          satışı kayıtlı.
+        </p>
+      )}
     </div>
   );
 }

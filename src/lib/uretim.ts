@@ -315,6 +315,88 @@ export function ayEtiketi(ay: string): string {
   return `${ad.charAt(0)}${ad.slice(1).toLocaleLowerCase("tr")} ${y}`;
 }
 
+/** Bir ürünün 12 aylık üretim (ve varsa satış) serisi — çubuk grafik için. */
+export interface UrunAylikSeri {
+  ad: string;
+  birim: RaporBirimi;
+  aciklama: string;
+  yil: number;
+  /** Ocak'tan Aralık'a 12 ay; veri yoksa değer null */
+  aylar: {
+    ay: string;        // "2026-07"
+    kisa: string;      // "Tem"
+    uretim: number | null;
+    satis: number | null;
+    /** İçinde bulunduğumuz ay — grafikte vurgulanır */
+    buAy: boolean;
+  }[];
+  /** Bulunduğumuz ayın üretimi (yoksa null) */
+  buAyUretim: number | null;
+  buAySatis: number | null;
+  yillikUretim: number;
+  yillikSatis: number | null;
+  /** Bu ürün için satış verisi tutuluyor mu */
+  satisVar: boolean;
+}
+
+const AY_KISA_12 = [
+  "Oca", "Şub", "Mar", "Nis", "May", "Haz",
+  "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara",
+];
+
+/**
+ * Her ürün için yıllık çubuk grafik serisi üretir.
+ *
+ * ── Satış neden yalnızca kilogram ürününde var ───────────────────────────
+ * aylik_satislar tablosunda ÜRÜN KIRILIMI YOK: şube başına aylık tek bir kg
+ * değeri tutuluyor, o da çiğköfte satışı. Lavaşın ya da sosların satışı
+ * sistemde hiç kayıtlı değil. Bu yüzden satış serisi yalnızca kilogram
+ * raporlanan ürüne bağlanıyor; diğer grafikler yalnızca üretim gösterir ve
+ * ekran bunun sebebini yazar. Uydurma bir eşleştirme yapmaktansa eksiği
+ * söylemek doğru.
+ */
+export function urunAylikSeriler(
+  urunOzetleri: UrunOzet[],
+  aylik: AylikSatir[],
+  satisMap: Map<string, number>,
+  bugun: string,
+): UrunAylikSeri[] {
+  // Grafiklerin yılı: üretim kaydı olan EN SON yıl. Üretim yoksa bugünün yılı.
+  const yillar = aylik.map((a) => Number(a.ay.slice(0, 4))).filter(Number.isFinite);
+  const yil = yillar.length ? Math.max(...yillar) : Number(bugun.slice(0, 4));
+  const buAyAnahtar = bugun.slice(0, 7);
+
+  return urunOzetleri.map((u) => {
+    const satisVar = u.birim === "kg";
+    const aylar = AY_KISA_12.map((kisa, i) => {
+      const ay = `${yil}-${String(i + 1).padStart(2, "0")}`;
+      const satir = aylik.find((a) => a.ay === ay);
+      const uretim = satir?.urunler[u.ad] ?? null;
+      const satis = satisVar ? satisMap.get(ay) ?? null : null;
+      return { ay, kisa, uretim, satis, buAy: ay === buAyAnahtar };
+    });
+
+    const buAySatir = aylar.find((a) => a.buAy) ?? null;
+    const yillikUretim = yuvarla(
+      aylar.reduce((t, a) => t + (a.uretim ?? 0), 0),
+    );
+    const yillikSatisHam = aylar.reduce((t, a) => t + (a.satis ?? 0), 0);
+
+    return {
+      ad: u.ad,
+      birim: u.birim,
+      aciklama: u.aciklama,
+      yil,
+      aylar,
+      buAyUretim: buAySatir?.uretim ?? null,
+      buAySatis: buAySatir?.satis ?? null,
+      yillikUretim,
+      yillikSatis: satisVar ? yuvarla(yillikSatisHam) : null,
+      satisVar,
+    };
+  });
+}
+
 export interface UretimOzet {
   /** kg olarak raporlanan ürünlerin toplamı */
   toplamKg: number;
@@ -330,6 +412,8 @@ export interface UretimOzet {
 
   /** Her ürün kendi raporlama biriminde */
   urunOzetleri: UrunOzet[];
+  /** Ürün başına 12 aylık üretim/satış serisi — çubuk grafikler */
+  urunSerileri: UrunAylikSeri[];
   gruplar: Kirilim[];
   ambalajlar: Kirilim[];
   /** kg bazlı ürünlerin günlük trendi */
@@ -427,6 +511,15 @@ export function uretimOzeti(
 
   const buAy = bugun.slice(0, 7);
 
+  const urunOzetleri = [...urunMap.values()].sort(
+    // Kilogramlılar önce (ana ürün), sonra miktara göre
+    (a, b) =>
+      Number(b.birim === "kg") - Number(a.birim === "kg") ||
+      b.kg - a.kg ||
+      b.deger - a.deger,
+  );
+  const aylikSatirlar = [...ayMap.values()].sort((a, b) => a.ay.localeCompare(b.ay));
+
   return {
     toplamKg: yuvarla(toplamKg),
     kgUrunAdlari: [...kgUrunAdlari].sort((a, b) => a.localeCompare(b, "tr")),
@@ -436,17 +529,12 @@ export function uretimOzeti(
     buAyKg: yuvarla(ayMap.get(buAy)?.kgToplam ?? 0),
     gunlukOrtalamaKg: uretimGunu ? yuvarla(toplamKg / uretimGunu) : null,
     uretimGunuSayisi: uretimGunu,
-    urunOzetleri: [...urunMap.values()].sort(
-      // Kilogramlılar önce (ana ürün), sonra miktara göre
-      (a, b) =>
-        Number(b.birim === "kg") - Number(a.birim === "kg") ||
-        b.kg - a.kg ||
-        b.deger - a.deger,
-    ),
+    urunOzetleri,
+    urunSerileri: urunAylikSeriler(urunOzetleri, aylikSatirlar, satisMap, bugun),
     gruplar: kir(kayitlar, (k) => k.urun_grup),
     ambalajlar: kir(kayitlar, (k) => k.ambalaj_tipi),
     gunluk,
-    aylik: [...ayMap.values()].sort((a, b) => a.ay.localeCompare(b.ay)),
+    aylik: aylikSatirlar,
   };
 }
 

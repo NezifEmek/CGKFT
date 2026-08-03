@@ -1,10 +1,17 @@
 -- 0021_urun_rapor_birimi.sql
 -- Her ürün kendi raporlama biriminde görünsün.
 --
--- Talep (Nezif): "Lavaş'ı KG bazlı görmek istemiyorlar, paket bazlı olsun
--- (1 paket 50 adet). Mini sosları 250'şer adetli paket, ekşi sosu 12'li
--- paket, diğer iki sosu adet olarak görmek istiyorlar. Açıklamalarında da
--- böyle olduğu açıkça yazılsın."
+-- Talep (Nezif, güncel liste): "Ürünler KG, Koli, Paket gibi en üst birimine
+-- göre özetlensin. Yani hepsi KG olarak görünmesin.
+--   Çiğköfte — KG / Lavaş — Paket / Ekşi Sos — Koli /
+--   Mini Ekşi Sos — Koli / Çok Acı Sos — Adet vb..."
+--
+-- Belirtilmeyen iki ürün benzerlerine göre eşlendi: Mini Acı Sos → koli
+-- (mini ekşi sos gibi), Acı Sos → adet (çok acı sos gibi). Yanlışsa Ürünler
+-- sekmesinden tek tıkla değiştirilebilir, geçmiş kayıtlar da anında uyar.
+--
+-- Bölen değerleri ürünlerin kendi koli_adedi alanından geliyor:
+-- ekşi sos 12, mini soslar 250, lavaş 50.
 --
 -- ── Neden kayda değil ÜRÜNE yazılıyor ─────────────────────────────────
 -- Raporlama birimi bir GÖRÜNTÜLEME tercihi. Kayda yazsaydık (kg_karsiligi
@@ -43,10 +50,16 @@ comment on column public.uretim_urunleri.rapor_bolen is
 -- ─── Mevcut ürünlerin ayarı ──────────────────────────────────────────────
 -- Ad üzerinden eşleştiriliyor; ürün yeniden adlandırılırsa Ürünler
 -- ekranından elle ayarlanır.
-update public.uretim_urunleri set rapor_birimi = 'kg',    rapor_bolen = 1   where upper(ad) = 'ÇİĞKÖFTE';
-update public.uretim_urunleri set rapor_birimi = 'paket', rapor_bolen = 50  where upper(ad) = 'LAVAŞ';
-update public.uretim_urunleri set rapor_birimi = 'paket', rapor_bolen = 12  where upper(ad) = 'EKŞİ SOS';
-update public.uretim_urunleri set rapor_birimi = 'paket', rapor_bolen = 250 where upper(ad) = 'MİNİ EKŞİ SOS';
-update public.uretim_urunleri set rapor_birimi = 'paket', rapor_bolen = 250 where upper(ad) = 'MİNİ ACI SOS';
-update public.uretim_urunleri set rapor_birimi = 'adet',  rapor_bolen = 1   where upper(ad) = 'ACI SOS';
-update public.uretim_urunleri set rapor_birimi = 'adet',  rapor_bolen = 1   where upper(ad) = 'ÇOK ACI SOS';
+-- upper() KULLANILMIYOR: Türkçe 'i' harfinin büyütülmesi veritabanının
+-- diline bağlı ve "MİNİ" gibi adlarda beklenmedik sonuç verebiliyor.
+-- Adlar zaten büyük harfle kayıtlı, doğrudan eşleştiriliyor.
+update public.uretim_urunleri set rapor_birimi = 'kg',    rapor_bolen = 1   where ad = 'ÇİĞKÖFTE';
+update public.uretim_urunleri set rapor_birimi = 'paket', rapor_bolen = 50  where ad = 'LAVAŞ';
+update public.uretim_urunleri set rapor_birimi = 'koli',  rapor_bolen = 12  where ad = 'EKŞİ SOS';
+update public.uretim_urunleri set rapor_birimi = 'koli',  rapor_bolen = 250 where ad = 'MİNİ EKŞİ SOS';
+update public.uretim_urunleri set rapor_birimi = 'koli',  rapor_bolen = 250 where ad = 'MİNİ ACI SOS';
+update public.uretim_urunleri set rapor_birimi = 'adet',  rapor_bolen = 1   where ad = 'ACI SOS';
+update public.uretim_urunleri set rapor_birimi = 'adet',  rapor_bolen = 1   where ad = 'ÇOK ACI SOS';
+
+-- Sonucu görmek için:
+--   select ad, rapor_birimi, rapor_bolen from public.uretim_urunleri order by ad;
