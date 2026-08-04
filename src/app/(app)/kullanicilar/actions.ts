@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Rol } from "@/types/database";
+import { hataMesaji } from "@/lib/hata";
 
 async function adminOl() {
   const profile = await requireProfile();
@@ -35,7 +36,7 @@ export async function kullaniciOlustur(_onceki: { hata?: string } | null, formDa
   });
 
   if (createError || !created.user) {
-    return { hata: "Kullanıcı oluşturulamadı: " + (createError?.message ?? "bilinmeyen hata") };
+    return { hata: hataMesaji(createError?.message, "Kullanıcı oluşturulamadı") };
   }
 
   const { error: profileError } = await admin.from("profiles").insert({
@@ -46,7 +47,7 @@ export async function kullaniciOlustur(_onceki: { hata?: string } | null, formDa
   });
 
   if (profileError) {
-    return { hata: "Profil oluşturulamadı: " + profileError.message };
+    return { hata: hataMesaji(profileError.message, "Profil oluşturulamadı") };
   }
 
   if (rol === "denetmen" && subeId) {

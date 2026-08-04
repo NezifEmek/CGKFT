@@ -9,6 +9,7 @@ import {
 } from "@/lib/sikayet";
 import { yetkiCoz, durumIcinYetkiVar, KAPATMA_DURUMLARI } from "@/lib/sikayet-rol";
 import { dosyalariKaydet, formdanDosyalar } from "@/lib/dosya-kaydet";
+import { hataMesaji } from "@/lib/hata";
 
 /** yeniId: yeni açılan kaydın kimliği — ekran onu açıp ek eklemeye yönlendirir. */
 type Sonuc = { hata?: string; ok?: string; yeniId?: string };
@@ -90,7 +91,7 @@ export async function sikayetKaydet(_o: Sonuc | null, formData: FormData): Promi
           "0023_sikayet_kayit_acma_duzeltmesi.sql çalıştırılmadıysa önce onu çalıştırın.",
       };
     }
-    return { hata: tabloHatasi(error.message) ?? ((id ? "Güncellenemedi: " : "Kaydedilemedi: ") + error.message) };
+    return { hata: tabloHatasi(error.message) ?? hataMesaji(error.message, id ? "Güncellenemedi" : "Kaydedilemedi") };
   }
 
   // Hata yok ama kayıt geri gelmediyse: RLS satırı gizlemiş olabilir.
@@ -117,7 +118,9 @@ export async function sikayetKaydet(_o: Sonuc | null, formData: FormData): Promi
       .insert({ sikayet_id: data.id, profil_id: gorevliId, atayan_id: profile.id });
 
     if (atamaHata) {
-      gorevliNotu = ". Görevli atanamadı: " + atamaHata.message;
+      // Kayıt açıldı ama görevli atanamadı — başarı mesajının SONUNA
+      // ekleniyor, tek başına bir hata değil.
+      gorevliNotu = ". Görevli atanamadı: " + hataMesaji(atamaHata.message, "Atanamadı");
     } else {
       gorevliNotu = ", görevli atandı";
       // Kayıt artık birinin üstünde — durumu "atandi"ya taşı ki listede
@@ -208,7 +211,7 @@ export async function durumDegistir(_o: Sonuc | null, formData: FormData): Promi
   if (kokNeden) guncelleme.kok_neden = kokNeden;
 
   const { error } = await supabase.from("sikayetler").update(guncelleme).eq("id", id);
-  if (error) return { hata: tabloHatasi(error.message) ?? "Değiştirilemedi: " + error.message };
+  if (error) return { hata: tabloHatasi(error.message) ?? hataMesaji(error.message, "Değiştirilemedi") };
 
   revalidatePath(YOL);
   return { ok: "Durum güncellendi" };
@@ -232,7 +235,7 @@ export async function hareketEkle(_o: Sonuc | null, formData: FormData): Promise
     kaydeden_id: profile.id,
   });
 
-  if (error) return { hata: tabloHatasi(error.message) ?? "Eklenemedi: " + error.message };
+  if (error) return { hata: tabloHatasi(error.message) ?? hataMesaji(error.message, "Eklenemedi") };
   revalidatePath(YOL);
   return { ok: "Not eklendi" };
 }
@@ -254,7 +257,7 @@ export async function atamaDegistir(_o: Sonuc | null, formData: FormData): Promi
       .delete()
       .eq("sikayet_id", id)
       .eq("profil_id", kisiId);
-    if (error) return { hata: "Kaldırılamadı: " + error.message };
+    if (error) return { hata: hataMesaji(error.message, "Kaldırılamadı") };
     revalidatePath(YOL);
     return { ok: "Görevlendirme kaldırıldı" };
   }
@@ -265,7 +268,7 @@ export async function atamaDegistir(_o: Sonuc | null, formData: FormData): Promi
 
   if (error) {
     if (/duplicate key/i.test(error.message)) return { hata: "Bu kişi zaten görevli." };
-    return { hata: tabloHatasi(error.message) ?? "Atanamadı: " + error.message };
+    return { hata: tabloHatasi(error.message) ?? hataMesaji(error.message, "Atanamadı") };
   }
 
   // Atama da geçmişe düşsün.
@@ -297,7 +300,7 @@ export async function sikayetSil(_o: Sonuc | null, formData: FormData): Promise<
 
   const supabase = await createClient();
   const { error } = await supabase.from("sikayetler").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   revalidatePath(YOL);
   return { ok: "Şikayet silindi" };

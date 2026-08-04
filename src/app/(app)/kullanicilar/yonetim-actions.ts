@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Rol } from "@/types/database";
+import { hataMesaji } from "@/lib/hata";
 
 type Sonuc = { hata?: string; ok?: string };
 
@@ -57,7 +58,7 @@ export async function profilGuncelle(_onceki: Sonuc | null, formData: FormData):
     })
     .eq("id", id);
 
-  if (error) return { hata: "Güncellenemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Güncellenemedi") };
 
   revalidatePath("/kullanicilar");
   return { ok: "Kullanıcı bilgileri güncellendi" };
@@ -78,7 +79,7 @@ export async function epostaGuncelle(_onceki: Sonuc | null, formData: FormData):
     email: eposta,
     email_confirm: true,
   });
-  if (error) return { hata: "E-posta değiştirilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "E-posta değiştirilemedi") };
 
   revalidatePath("/kullanicilar");
   return { ok: `E-posta ${eposta} olarak güncellendi` };
@@ -95,7 +96,7 @@ export async function sifreBelirle(_onceki: Sonuc | null, formData: FormData): P
   if (sifre.length < 8) return { hata: "Şifre en az 8 karakter olmalı." };
 
   const { error } = await admin.auth.admin.updateUserById(id, { password: sifre });
-  if (error) return { hata: "Şifre değiştirilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Şifre değiştirilemedi") };
 
   revalidatePath("/kullanicilar");
   return {
@@ -117,7 +118,7 @@ export async function sifreSifirlamaGonder(
   const { error } = await admin.auth.resetPasswordForEmail(eposta, {
     redirectTo: (process.env.NEXT_PUBLIC_SITE_URL ?? "https://cgkft.vercel.app") + "/login",
   });
-  if (error) return { hata: "E-posta gönderilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "E-posta gönderilemedi") };
 
   return { ok: `Şifre belirleme bağlantısı ${eposta} adresine gönderildi` };
 }
@@ -142,7 +143,7 @@ export async function erisimDegistir(_onceki: Sonuc | null, formData: FormData):
   const { error } = await admin.auth.admin.updateUserById(id, {
     ban_duration: kapat ? SURESIZ_ENGEL : "none",
   });
-  if (error) return { hata: "İşlem başarısız: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "İşlem başarısız") };
 
   revalidatePath("/kullanicilar");
   return { ok: kapat ? "Kullanıcının girişi kapatıldı" : "Kullanıcının girişi açıldı" };
@@ -176,7 +177,7 @@ export async function kullaniciSil(_onceki: Sonuc | null, formData: FormData): P
   }
 
   const { error } = await admin.auth.admin.deleteUser(id);
-  if (error) return { hata: "Kullanıcı silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Kullanıcı silinemedi") };
 
   revalidatePath("/kullanicilar");
   return { ok: "Kullanıcı silindi" };

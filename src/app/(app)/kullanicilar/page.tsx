@@ -7,6 +7,7 @@ import { pozisyonlariNormalize } from "@/lib/dokuman";
 import { kendisiVeAstlari } from "@/lib/organizasyon";
 import { KullaniciEkleForm } from "./kullanici-ekle-form";
 import { KullaniciSatiri, type KullaniciSatiriVerisi } from "./kullanici-satiri";
+import { hataMesaji } from "@/lib/hata";
 
 export default async function KullanicilarSayfasi() {
   const profile = await requireProfile();
@@ -136,7 +137,7 @@ export default async function KullanicilarSayfasi() {
 
       {authSonuc.error && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900 p-4 text-sm text-amber-800 dark:text-amber-300">
-          E-posta ve giriş bilgileri okunamadı ({authSonuc.error.message}). Diğer alanlar
+          E-posta ve giriş bilgileri okunamadı. {hataMesaji(authSonuc.error.message, "Okunamadı")} Diğer alanlar
           çalışmaya devam eder.
         </div>
       )}

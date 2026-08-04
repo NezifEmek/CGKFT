@@ -7,6 +7,7 @@ import {
   kilogramaCevir, OLCU_BIRIMLERI, RAPOR_BIRIMLERI, type Urun,
 } from "@/lib/uretim";
 import { AYLAR_12 } from "@/types/database";
+import { hataMesaji } from "@/lib/hata";
 
 type Sonuc = { hata?: string; ok?: string };
 const YOL = "/uretim";
@@ -57,7 +58,7 @@ export async function kayitKaydet(_o: Sonuc | null, formData: FormData): Promise
     .eq("id", urunId)
     .maybeSingle<Urun>();
 
-  if (urunHata) return { hata: tabloHatasi(urunHata.message) ?? "Ürün okunamadı: " + urunHata.message };
+  if (urunHata) return { hata: tabloHatasi(urunHata.message) ?? hataMesaji(urunHata.message, "Ürün okunamadı") };
   if (!urun) return { hata: "Seçilen ürün bulunamadı." };
 
   const kg = kilogramaCevir(miktar, olcuBirimi, urun);
@@ -90,7 +91,7 @@ export async function kayitKaydet(_o: Sonuc | null, formData: FormData): Promise
     : await supabase.from("uretim_kayitlari").insert({ ...alanlar, olusturan_id: profile.id });
 
   if (error) {
-    return { hata: tabloHatasi(error.message) ?? ((id ? "Güncellenemedi: " : "Kaydedilemedi: ") + error.message) };
+    return { hata: tabloHatasi(error.message) ?? hataMesaji(error.message, id ? "Güncellenemedi" : "Kaydedilemedi") };
   }
 
   revalidatePath(YOL);
@@ -111,7 +112,7 @@ export async function kayitSil(_o: Sonuc | null, formData: FormData): Promise<So
 
   const supabase = await createClient();
   const { error } = await supabase.from("uretim_kayitlari").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   revalidatePath(YOL);
   return { ok: "Kayıt silindi" };
@@ -151,7 +152,7 @@ export async function topluKayitSil(
     if (error) {
       return {
         silinen,
-        hata: `${silinen} kayıt silindikten sonra durdu: ${error.message}`,
+        hata: `${silinen} kayıt silindikten sonra durdu. ${hataMesaji(error.message, "Silinemedi")}`,
       };
     }
     silinen += data?.length ?? 0;
@@ -215,7 +216,7 @@ export async function urunKaydet(_o: Sonuc | null, formData: FormData): Promise<
 
   if (error) {
     if (/duplicate key/i.test(error.message)) return { hata: `"${kod}" kodu zaten kullanılıyor.` };
-    return { hata: tabloHatasi(error.message) ?? "Kaydedilemedi: " + error.message };
+    return { hata: tabloHatasi(error.message) ?? hataMesaji(error.message, "Kaydedilemedi") };
   }
 
   revalidatePath(YOL);
@@ -248,7 +249,7 @@ export async function urunSil(_o: Sonuc | null, formData: FormData): Promise<Son
     if (/foreign key/i.test(error.message)) {
       return { hata: "Bu ürünün üretim kayıtları var; silinemez. Bunun yerine pasife alın." };
     }
-    return { hata: "Silinemedi: " + error.message };
+    return { hata: hataMesaji(error.message, "Silinemedi") };
   }
 
   revalidatePath(YOL);
@@ -289,7 +290,7 @@ export async function topluAktar(
     .returns<Urun[]>();
 
   if (urunHata) {
-    return { eklenen: 0, atlanan: [], hata: tabloHatasi(urunHata.message) ?? urunHata.message };
+    return { eklenen: 0, atlanan: [], hata: tabloHatasi(urunHata.message) ?? hataMesaji(urunHata.message, "Ürünler okunamadı") };
   }
 
   const kodIle = new Map((urunler ?? []).map((u) => [u.kod.toLocaleUpperCase("tr"), u]));
@@ -352,7 +353,7 @@ export async function topluAktar(
   }
 
   const { error } = await supabase.from("uretim_kayitlari").insert(eklenecek);
-  if (error) return { eklenen: 0, atlanan, hata: "Kaydedilemedi: " + error.message };
+  if (error) return { eklenen: 0, atlanan, hata: hataMesaji(error.message, "Kaydedilemedi") };
 
   revalidatePath(YOL);
   return { eklenen: eklenecek.length, atlanan };
@@ -430,7 +431,7 @@ export async function urunSatisKaydet(
       if (/relation .* does not exist/i.test(error.message) || /schema cache/i.test(error.message)) {
         return { hata: "Satış tablosu henüz oluşturulmamış — 0022_urun_satislari.sql çalıştırılmalı." };
       }
-      return { hata: "Kaydedilemedi: " + error.message };
+      return { hata: hataMesaji(error.message, "Kaydedilemedi") };
     }
   }
 

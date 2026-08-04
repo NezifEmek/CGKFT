@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { VARSAYILAN_PRIM_AYARLARI, primAyarlariNormalize } from "@/lib/dokuman";
 import type { PrimAyarlari, PrimPersonel } from "@/lib/dokuman-varsayilan";
+import { hataMesaji } from "@/lib/hata";
 
 type Sonuc = { hata?: string; ok?: string };
 
@@ -100,7 +101,7 @@ export async function primAyarlariKaydet(
       updated_at: new Date().toISOString(),
     })
     .eq("id", 1);
-  if (error) return { hata: "Kaydedilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Kaydedilemedi") };
 
   revalidatePath("/prim-hakedis");
   revalidatePath("/prim-projeksiyon");
@@ -120,7 +121,7 @@ export async function primAyarlariSifirla(_: Sonuc | null): Promise<Sonuc> {
       updated_at: new Date().toISOString(),
     })
     .eq("id", 1);
-  if (error) return { hata: "Sıfırlanamadı: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Sıfırlanamadı") };
 
   revalidatePath("/prim-hakedis");
   revalidatePath("/prim-projeksiyon");

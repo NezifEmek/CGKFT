@@ -7,6 +7,7 @@ import { requireProfile } from "@/lib/auth";
 // Sabitler @/lib/oneri'de: "use server" dosyasından ihraç edilen dizi/nesne
 // istemcide gerçek değer olarak görünmez.
 import { KATEGORILER, DURUMLAR, ONCELIKLER } from "@/lib/oneri";
+import { hataMesaji } from "@/lib/hata";
 
 type Sonuc = { hata?: string; ok?: string };
 const YOL = "/oneriler";
@@ -31,7 +32,7 @@ export async function oneriEkle(_o: Sonuc | null, formData: FormData): Promise<S
     if (/relation .* does not exist/i.test(error.message)) {
       return { hata: "Tablo yok — 0009_oneriler.sql çalıştırılmalı." };
     }
-    return { hata: "Kaydedilemedi: " + error.message };
+    return { hata: hataMesaji(error.message, "Kaydedilemedi") };
   }
   revalidatePath(YOL);
   return { ok: "Öneriniz kaydedildi" };
@@ -55,7 +56,7 @@ export async function destekDegistir(_o: Sonuc | null, formData: FormData): Prom
     ? await supabase.from("oneri_destekleri").delete().eq("oneri_id", id).eq("profil_id", profile.id)
     : await supabase.from("oneri_destekleri").insert({ oneri_id: id, profil_id: profile.id });
 
-  if (error) return { hata: "İşlenemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "İşlenemedi") };
   revalidatePath(YOL);
   return { ok: var_ ? "Desteğiniz geri alındı" : "Desteklediniz" };
 }
@@ -87,7 +88,7 @@ export async function oneriKarar(_o: Sonuc | null, formData: FormData): Promise<
     })
     .eq("id", id);
 
-  if (error) return { hata: "Kaydedilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Kaydedilemedi") };
   revalidatePath(YOL);
   return { ok: "Öneri güncellendi" };
 }
@@ -99,7 +100,7 @@ export async function oneriSil(_o: Sonuc | null, formData: FormData): Promise<So
   const supabase = await createClient();
   // RLS: yalnızca ekleyen veya yönetim silebilir.
   const { error } = await supabase.from("oneriler").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
   revalidatePath(YOL);
   return { ok: "Öneri silindi" };
 }

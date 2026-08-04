@@ -9,6 +9,7 @@ import {
   skorHesapla,
   grupBul,
 } from "@/lib/denetim-sorulari";
+import { hataMesaji } from "@/lib/hata";
 
 export async function denetimKaydet(
   _onceki: { hata?: string; ok?: boolean } | null,
@@ -63,7 +64,7 @@ export async function denetimKaydet(
     },
   });
 
-  if (error) return { hata: "Denetim kaydedilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Denetim kaydedilemedi") };
 
   revalidatePath("/sube-denetimi");
   revalidatePath("/yetkili-analizi");
@@ -81,7 +82,7 @@ export async function denetimSil(
   const supabase = await createClient();
   // RLS: kullanıcı yalnızca yetkili olduğu kayıtları silebilir.
   const { error } = await supabase.from("denetimler").delete().eq("id", denetimId);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   revalidatePath("/sube-denetimi");
   revalidatePath("/yetkili-analizi");

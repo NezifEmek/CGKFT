@@ -9,6 +9,7 @@ import {
   pozisyonlariNormalize,
   type Pozisyon,
 } from "@/lib/dokuman";
+import { hataMesaji } from "@/lib/hata";
 
 type Sonuc = { hata?: string; ok?: string };
 
@@ -39,7 +40,7 @@ async function yaz(pozisyonlar: Pozisyon[], profilId: string): Promise<string | 
       updated_at: new Date().toISOString(),
     })
     .eq("id", 1);
-  return error ? error.message : null;
+  return error ? hataMesaji(error.message, "Kaydedilemedi") : null;
 }
 
 export async function pozisyonKaydet(_: Sonuc | null, formData: FormData): Promise<Sonuc> {

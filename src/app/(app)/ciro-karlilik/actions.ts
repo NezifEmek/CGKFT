@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
+import { hataMesaji } from "@/lib/hata";
 
 export async function fiyatModeliKaydet(
   _onceki: { hata?: string } | null,
@@ -33,7 +34,7 @@ export async function fiyatModeliKaydet(
     })
     .eq("id", 1);
 
-  if (error) return { hata: "Kaydedilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Kaydedilemedi") };
 
   revalidatePath("/ciro-karlilik");
   return { hata: undefined };

@@ -7,6 +7,7 @@ import { haftaBasi } from "@/lib/hafta";
 // Sabitler @/lib/plan'da: "use server" dosyasından ihraç edilen dizi/nesne
 // istemcide gerçek değer olarak görünmez.
 import { PLAN_TURLERI } from "@/lib/plan";
+import { hataMesaji } from "@/lib/hata";
 
 type Sonuc = { hata?: string; ok?: string };
 const YOL = "/haftalik-faaliyet";
@@ -66,7 +67,7 @@ export async function planEkle(_o: Sonuc | null, formData: FormData): Promise<So
     if (/haftalik_plan_tekil/.test(error.message)) {
       return { hata: "Bu şube o hafta için zaten planlanmış." };
     }
-    return { hata: "Eklenemedi: " + error.message };
+    return { hata: hataMesaji(error.message, "Eklenemedi") };
   }
 
   revalidatePath(YOL);
@@ -97,7 +98,7 @@ export async function planDurum(_o: Sonuc | null, formData: FormData): Promise<S
     })
     .eq("id", id);
 
-  if (error) return { hata: "Kaydedilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Kaydedilemedi") };
   revalidatePath(YOL);
   return { ok: durum ? "İşaretlendi" : "Otomatik hesaba döndürüldü" };
 }
@@ -112,7 +113,7 @@ export async function planSil(_o: Sonuc | null, formData: FormData): Promise<Son
 
   const supabase = await createClient();
   const { error } = await supabase.from("haftalik_plan").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   revalidatePath(YOL);
   return { ok: "Plandan çıkarıldı" };
@@ -138,7 +139,7 @@ export async function planKopyala(_o: Sonuc | null, formData: FormData): Promise
     .eq("profil_id", hedef)
     .eq("hafta", kaynakHafta);
 
-  if (okumaHata) return { hata: "Okunamadı: " + okumaHata.message };
+  if (okumaHata) return { hata: hataMesaji(okumaHata.message, "Okunamadı") };
   if (!kaynak?.length) return { hata: "Önceki haftada kopyalanacak plan yok." };
 
   // Hedef haftada zaten olanları ayıkla. Tekillik indeksi ifade tabanlı
@@ -161,7 +162,7 @@ export async function planKopyala(_o: Sonuc | null, formData: FormData): Promise
   if (!yeni.length) return { ok: "Kopyalanacak yeni satır yok — hepsi zaten planda." };
 
   const { error } = await supabase.from("haftalik_plan").insert(yeni);
-  if (error) return { hata: "Kopyalanamadı: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Kopyalanamadı") };
 
   revalidatePath(YOL);
   const atlanan = kaynak.length - yeni.length;

@@ -2,6 +2,7 @@
 // aylik_satislar gibi 1000'i aşan tablolarda .select("*") sessizce veri keser
 // (hata vermez!) — bu yardımcı, tüm satırları .range() ile sayfalayarak çeker.
 import type { PostgrestResponse } from "@supabase/supabase-js";
+import { hataMesaji } from "@/lib/hata";
 
 export async function tumSatirlariGetir<T>(
   sorgu: (from: number, to: number) => PromiseLike<PostgrestResponse<T>>,
@@ -41,6 +42,8 @@ export async function sonuclaGetir<T>(
   try {
     return { veri: await islem(), hata: null };
   } catch (e) {
-    return { veri: [], hata: e instanceof Error ? e.message : String(e) };
+    // Ekranda gösterilebilecek hale getiriliyor; ham PostgREST metni
+    // kullanıcıya bir şey anlatmıyor (bkz. @/lib/hata).
+    return { veri: [], hata: hataMesaji(e instanceof Error ? e.message : String(e), "Okunamadı") };
   }
 }

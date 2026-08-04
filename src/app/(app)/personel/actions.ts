@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { PRIM_GRUPLARI } from "@/lib/kadro";
+import { hataMesaji } from "@/lib/hata";
 
 type Sonuc = { hata?: string; ok?: string };
 const YOL = "/personel";
@@ -58,7 +59,7 @@ export async function personelKaydet(_o: Sonuc | null, formData: FormData): Prom
     : await supabase.from("personeller").insert(alanlar);
 
   if (error) {
-    return { hata: tabloHatasi(error.message) ?? ((id ? "Güncellenemedi: " : "Eklenemedi: ") + error.message) };
+    return { hata: tabloHatasi(error.message) ?? hataMesaji(error.message, id ? "Güncellenemedi" : "Eklenemedi") };
   }
 
   revalidatePath(YOL);
@@ -79,7 +80,7 @@ export async function personelSil(_o: Sonuc | null, formData: FormData): Promise
 
   const supabase = await createClient();
   const { error } = await supabase.from("personeller").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   revalidatePath(YOL);
   return {
@@ -119,7 +120,7 @@ export async function atamaEkle(_o: Sonuc | null, formData: FormData): Promise<S
     if (/atama_tek_acik/.test(error.message)) {
       return { hata: "Bu kişi zaten bu görevde. Önce mevcut görevi bitirin." };
     }
-    return { hata: tabloHatasi(error.message) ?? "Atanamadı: " + error.message };
+    return { hata: tabloHatasi(error.message) ?? hataMesaji(error.message, "Atanamadı") };
   }
 
   revalidatePath(YOL);
@@ -160,7 +161,7 @@ export async function atamaGuncelle(_o: Sonuc | null, formData: FormData): Promi
     if (/atama_tek_acik/.test(error.message)) {
       return { hata: "Bu kişinin bu görevde zaten açık bir kaydı var." };
     }
-    return { hata: "Güncellenemedi: " + error.message };
+    return { hata: hataMesaji(error.message, "Güncellenemedi") };
   }
 
   revalidatePath(YOL);
@@ -177,7 +178,7 @@ export async function atamaSil(_o: Sonuc | null, formData: FormData): Promise<So
 
   const supabase = await createClient();
   const { error } = await supabase.from("pozisyon_atamalari").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   revalidatePath(YOL);
   revalidatePath("/prim-hakedis");

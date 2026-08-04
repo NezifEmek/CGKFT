@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import type { Esik } from "@/lib/analytics";
+import { hataMesaji } from "@/lib/hata";
 
 export async function esiklerKaydet(_onceki: { hata?: string } | null, formData: FormData) {
   const profile = await requireProfile();
@@ -24,7 +25,7 @@ export async function esiklerKaydet(_onceki: { hata?: string } | null, formData:
 
   const { error } = await supabase.from("segment_ayarlari").update({ baz, esikler }).eq("id", 1);
 
-  if (error) return { hata: "Kaydedilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Kaydedilemedi") };
 
   revalidatePath("/segmentasyon");
   revalidatePath("/");

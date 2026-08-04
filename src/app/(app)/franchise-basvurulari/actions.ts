@@ -8,6 +8,7 @@ import { subeKoduUret, kodDenetle, KOD_DESENI } from "@/lib/sube-kod";
 import type { Sube } from "@/types/database";
 import { DURUMLAR, KANALLAR, KAYIP_NEDENLERI, MEMNUNIYET, PUANLI_ALANLAR } from "@/lib/franchise";
 import { koordinatCoz } from "@/lib/konum";
+import { hataMesaji } from "@/lib/hata";
 
 type Sonuc = { hata?: string; ok?: string };
 
@@ -97,7 +98,7 @@ export async function basvuruEkle(_onceki: Sonuc | null, formData: FormData): Pr
     if (/relation .* does not exist/i.test(error.message)) {
       return { hata: "Tablo yok — 0005_franchise_basvuru.sql çalıştırılmalı." };
     }
-    return { hata: "Kaydedilemedi: " + error.message };
+    return { hata: hataMesaji(error.message, "Kaydedilemedi") };
   }
 
   revalidatePath("/franchise-basvurulari");
@@ -126,7 +127,7 @@ export async function basvuruGuncelle(_onceki: Sonuc | null, formData: FormData)
     })
     .eq("id", id);
 
-  if (error) return { hata: "Güncellenemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Güncellenemedi") };
 
   revalidatePath("/franchise-basvurulari");
   return { ok: "Başvuru güncellendi" };
@@ -142,7 +143,7 @@ export async function basvuruSil(_onceki: Sonuc | null, formData: FormData): Pro
 
   const supabase = await createClient();
   const { error } = await supabase.from("franchise_basvurulari").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   revalidatePath("/franchise-basvurulari");
   return { ok: "Başvuru silindi" };
@@ -203,7 +204,7 @@ export async function basvurudanSubeAc(_onceki: Sonuc | null, formData: FormData
     if (/column .* sube_id .* does not exist/i.test(okumaHata.message)) {
       return { hata: "Bağlantı sütunu yok — 0014_franchise_sube.sql çalıştırılmalı." };
     }
-    return { hata: "Başvuru okunamadı: " + okumaHata.message };
+    return { hata: hataMesaji(okumaHata.message, "Başvuru okunamadı") };
   }
   if (!basvuru) return { hata: "Başvuru bulunamadı." };
   if (basvuru.sube_id) return { hata: "Bu başvurudan zaten bir şube açılmış." };
@@ -272,7 +273,7 @@ export async function basvurudanSubeAc(_onceki: Sonuc | null, formData: FormData
     if (/column .* does not exist/i.test(subeHata.message)) {
       return { hata: "Şube alanları eksik — 0010_sube_ana_veri.sql çalıştırılmalı." };
     }
-    return { hata: "Şube açılamadı: " + subeHata.message };
+    return { hata: hataMesaji(subeHata.message, "Şube açılamadı") };
   }
   if (!yeniSube) return { hata: "Şube oluşturuldu ama kaydı okunamadı." };
 
@@ -296,7 +297,7 @@ export async function basvurudanSubeAc(_onceki: Sonuc | null, formData: FormData
 
   if (bagHata) {
     return {
-      hata: `Şube ${yeniSube.kod} koduyla açıldı ancak başvuruya bağlanamadı (${bagHata.message}). Şubeler ekranından kontrol edin.`,
+      hata: `Şube ${yeniSube.kod} koduyla açıldı ancak başvuruya bağlanamadı. ${hataMesaji(bagHata.message, "Bağlanamadı")}. Şubeler ekranından kontrol edin.`,
     };
   }
 
@@ -318,7 +319,7 @@ export async function subeBagiKaldir(_onceki: Sonuc | null, formData: FormData):
     .update({ sube_id: null, sube_acilis_at: null, guncelleyen_id: profile.id })
     .eq("id", id);
 
-  if (error) return { hata: "Kaldırılamadı: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Kaldırılamadı") };
   revalidatePath("/franchise-basvurulari");
   return { ok: "Bağlantı kaldırıldı — şube silinmedi, duruyor." };
 }
@@ -363,7 +364,7 @@ export async function topluSorumluAta(
       .update({ sirket_sorumlusu: ad, guncelleyen_id: profile.id, updated_at: new Date().toISOString() })
       .in("id", temiz.slice(i, i + PARCA))
       .select("id");
-    if (error) return { guncellenen: toplam, hata: "Güncellenemedi: " + error.message };
+    if (error) return { guncellenen: toplam, hata: hataMesaji(error.message, "Güncellenemedi") };
     toplam += data?.length ?? 0;
   }
 
@@ -404,7 +405,7 @@ export async function gorusmeEkle(_onceki: Sonuc | null, formData: FormData): Pr
     if (/relation .* does not exist/i.test(error.message) || /schema cache/i.test(error.message)) {
       return { hata: "Görüşme tablosu yok — 0020_franchise_adres_gorusme.sql çalıştırılmalı." };
     }
-    return { hata: "Kaydedilemedi: " + error.message };
+    return { hata: hataMesaji(error.message, "Kaydedilemedi") };
   }
 
   revalidatePath("/franchise-basvurulari");
@@ -422,7 +423,7 @@ export async function gorusmeSil(_onceki: Sonuc | null, formData: FormData): Pro
 
   const supabase = await createClient();
   const { error } = await supabase.from("franchise_gorusmeleri").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   revalidatePath("/franchise-basvurulari");
   return { ok: "Görüşme silindi" };

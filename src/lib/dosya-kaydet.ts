@@ -13,6 +13,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { KOVA, AZAMI_BOYUT, turIzinliMi, yolUret } from "@/lib/dosya";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { hataMesaji } from "@/lib/hata";
 
 export interface YuklemeSonucu {
   ok?: string;
@@ -91,7 +92,8 @@ function kovaHatasi(mesaj: string): string {
   if (/Bucket not found/i.test(mesaj)) {
     return "Depolama kovası bulunamadı — 0015_dosyalar.sql çalıştırılmalı.";
   }
-  return mesaj;
+  // Geri kalanı ortak çeviriciye — kullanıcı ham depolama hatası görmesin.
+  return hataMesaji(mesaj, "Yüklenemedi");
 }
 
 /**

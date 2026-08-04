@@ -7,6 +7,7 @@ import { requireProfile } from "@/lib/auth";
 import { subeKoduUret, kodDenetle, KOD_DESENI } from "@/lib/sube-kod";
 import { koordinatCoz } from "@/lib/konum";
 import type { Sube } from "@/types/database";
+import { hataMesaji } from "@/lib/hata";
 
 export async function subeEkle(_onceki: { hata?: string } | null, formData: FormData) {
   const profile = await requireProfile();
@@ -63,7 +64,7 @@ export async function subeEkle(_onceki: { hata?: string } | null, formData: Form
     il_sube_sirasi: siraNo,
   });
 
-  if (error) return { hata: "Şube eklenemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Şube eklenemedi") };
 
   revalidatePath("/subeler");
   return { hata: undefined };
@@ -126,7 +127,7 @@ export async function subeIletisimKaydet(
     if (/column .* does not exist/i.test(error.message)) {
       return { hata: "Alanlar henüz oluşturulmamış — 0010_sube_ana_veri.sql çalıştırılmalı." };
     }
-    return { hata: "Kaydedilemedi: " + error.message };
+    return { hata: hataMesaji(error.message, "Kaydedilemedi") };
   }
 
   revalidatePath(`/subeler/${subeId}`);
@@ -173,7 +174,7 @@ export async function sorumluDegistir(
     .update({ [sutun]: yeni, updated_at: new Date().toISOString() })
     .eq("id", subeId);
 
-  if (error) return { hata: "Değiştirilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Değiştirilemedi") };
 
   revalidatePath(`/subeler/${subeId}`);
   revalidatePath("/sube-yonetimi");
@@ -222,7 +223,7 @@ export async function sorumluGecmisEkle(
     if (/relation .* does not exist/i.test(error.message)) {
       return { hata: "Tablo yok — 0010_sube_ana_veri.sql çalıştırılmalı." };
     }
-    return { hata: "Eklenemedi: " + error.message };
+    return { hata: hataMesaji(error.message, "Eklenemedi") };
   }
 
   revalidatePath(`/subeler/${subeId}`);
@@ -265,7 +266,7 @@ export async function sorumluGecmisGuncelle(
     if (/sube_sorumlu_gecmisi_tek_acik/.test(error.message)) {
       return { hata: "Bu tarafta zaten görevde olan bir kişi var. Önce onun bitiş tarihini girin." };
     }
-    return { hata: "Güncellenemedi: " + error.message };
+    return { hata: hataMesaji(error.message, "Güncellenemedi") };
   }
 
   revalidatePath(`/subeler/${subeId}`);
@@ -286,7 +287,7 @@ export async function sorumluGecmisSil(
 
   const supabase = await createClient();
   const { error } = await supabase.from("sube_sorumlu_gecmisi").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   revalidatePath(`/subeler/${subeId}`);
   return { ok: "Kayıt silindi" };
@@ -342,7 +343,7 @@ export async function sozlesmeKaydet(
     if (/sozlesme_tarih_sirasi/.test(error.message)) {
       return { hata: "Bitiş tarihi başlangıçtan önce olamaz." };
     }
-    return { hata: (id ? "Güncellenemedi: " : "Eklenemedi: ") + error.message };
+    return { hata: hataMesaji(error.message, id ? "Güncellenemedi" : "Eklenemedi") };
   }
 
   revalidatePath(`/subeler/${subeId}`);
@@ -370,7 +371,7 @@ export async function sozlesmeSil(
     .returns<{ id: string; yol: string }[]>();
 
   const { error } = await supabase.from("sozlesmeler").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   if (ekler?.length) {
     await supabase.from("dosyalar").delete().in("id", ekler.map((e) => e.id));
@@ -388,7 +389,7 @@ export async function kgKaydet(subeId: string, yil: number, ay: string, kg: numb
     .from("aylik_satislar")
     .upsert({ sube_id: subeId, yil, ay, kg }, { onConflict: "sube_id,yil,ay" });
 
-  if (error) return { hata: error.message };
+  if (error) return { hata: hataMesaji(error.message, "İşlenemedi") };
   revalidatePath(`/subeler/${subeId}`);
   return { hata: null };
 }
@@ -410,7 +411,7 @@ export async function denetimEkle(_onceki: { hata?: string } | null, formData: F
     notlar,
   });
 
-  if (error) return { hata: "Denetim kaydedilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Denetim kaydedilemedi") };
 
   revalidatePath(`/subeler/${subeId}`);
   return { hata: undefined };

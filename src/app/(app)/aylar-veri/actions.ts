@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { AYLAR_12 } from "@/types/database";
+import { hataMesaji } from "@/lib/hata";
 
 async function yonetebilirMi() {
   const profile = await requireProfile();
@@ -28,7 +29,7 @@ export async function ayEkle(_onceki: { hata?: string; ok?: boolean } | null, fo
     .from("aylar")
     .upsert({ yil, ay, gun_sayisi: gunSayisi }, { onConflict: "yil,ay" });
 
-  if (error) return { hata: "Ay eklenemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Ay eklenemedi") };
 
   revalidatePath("/aylar-veri");
   revalidatePath("/");
@@ -50,10 +51,10 @@ export async function aySil(_onceki: { hata?: string; ok?: boolean } | null, for
     .delete()
     .eq("yil", yil)
     .eq("ay", ay);
-  if (satisHata) return { hata: "Aya ait satışlar silinemedi: " + satisHata.message };
+  if (satisHata) return { hata: hataMesaji(satisHata.message, "Aya ait satışlar silinemedi") };
 
   const { error } = await supabase.from("aylar").delete().eq("yil", yil).eq("ay", ay);
-  if (error) return { hata: "Ay silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Ay silinemedi") };
 
   revalidatePath("/aylar-veri");
   revalidatePath("/");
@@ -75,7 +76,7 @@ export async function kgKaydet(subeId: string, yil: number, ay: string, kg: numb
       .eq("sube_id", subeId)
       .eq("yil", yil)
       .eq("ay", ay);
-    if (error) return { hata: error.message };
+    if (error) return { hata: hataMesaji(error.message, "Kaydedilemedi") };
     revalidatePath("/aylar-veri");
     return { hata: null };
   }
@@ -89,7 +90,7 @@ export async function kgKaydet(subeId: string, yil: number, ay: string, kg: numb
       { onConflict: "sube_id,yil,ay" },
     );
 
-  if (error) return { hata: error.message };
+  if (error) return { hata: hataMesaji(error.message, "Kaydedilemedi") };
 
   revalidatePath("/aylar-veri");
   revalidatePath("/");

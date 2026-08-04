@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { GELIR_ALANLARI, GIDER_ALANLARI, AYLAR_12 } from "@/lib/merkez-gg";
+import { hataMesaji } from "@/lib/hata";
 
 type Sonuc = { hata?: string; ok?: string };
 
@@ -47,7 +48,7 @@ export async function gunlukKaydet(_onceki: Sonuc | null, formData: FormData): P
     .from("merkez_gg_gunluk")
     .upsert(satir, { onConflict: "sube_id,tarih" });
 
-  if (error) return { hata: "Kaydedilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Kaydedilemedi") };
 
   revalidatePath("/merkez-gelir-gider");
   return { ok: `${tarih} kaydedildi` };
@@ -62,7 +63,7 @@ export async function gunlukSil(_onceki: Sonuc | null, formData: FormData): Prom
 
   const supabase = await createClient();
   const { error } = await supabase.from("merkez_gg_gunluk").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   revalidatePath("/merkez-gelir-gider");
   return { ok: "Gün kaydı silindi" };
@@ -94,7 +95,7 @@ export async function kalemKaydet(_onceki: Sonuc | null, formData: FormData): Pr
     guncelleyen_id: profile.id,
   });
 
-  if (error) return { hata: "Kaydedilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Kaydedilemedi") };
 
   revalidatePath("/merkez-gelir-gider");
   return { ok: `"${urun}" kalemi eklendi` };
@@ -109,7 +110,7 @@ export async function kalemSil(_onceki: Sonuc | null, formData: FormData): Promi
 
   const supabase = await createClient();
   const { error } = await supabase.from("merkez_gg_kalem").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   revalidatePath("/merkez-gelir-gider");
   return { ok: "Kalem silindi" };
@@ -174,7 +175,7 @@ export async function excelIceAktar(sayfalar: IceAktarSayfasi[]): Promise<
     const { error: gunHata } = await supabase
       .from("merkez_gg_gunluk")
       .upsert(satirlar, { onConflict: "sube_id,tarih" });
-    if (gunHata) return { hata: `${s.ay} günlük kayıtları yazılamadı: ${gunHata.message}` };
+    if (gunHata) return { hata: `${s.ay} günlük kayıtları yazılamadı. ${hataMesaji(gunHata.message, "Yazılamadı")}` };
     gunSayisi += satirlar.length;
 
     if (s.kalemler.length) {
@@ -199,7 +200,7 @@ export async function excelIceAktar(sayfalar: IceAktarSayfasi[]): Promise<
           guncelleyen_id: profile.id,
         })),
       );
-      if (kalemHata) return { hata: `${s.ay} kalemleri yazılamadı: ${kalemHata.message}` };
+      if (kalemHata) return { hata: `${s.ay} kalemleri yazılamadı. ${hataMesaji(kalemHata.message, "Yazılamadı")}` };
       kalemSayisi += s.kalemler.length;
     }
   }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import type { GonderimYontemi } from "@/lib/toplanti";
+import { hataMesaji } from "@/lib/hata";
 
 type Sonuc = { hata?: string; ok?: string };
 
@@ -67,7 +68,7 @@ export async function toplantiOlustur(_o: Sonuc | null, formData: FormData): Pro
     if (/relation .* does not exist/i.test(error.message)) {
       return { hata: "Tablolar yok — 0006_toplanti.sql çalıştırılmalı." };
     }
-    return { hata: "Toplantı açılamadı: " + error.message };
+    return { hata: hataMesaji(error.message, "Toplantı açılamadı") };
   }
 
   revalidatePath(YOL);
@@ -96,7 +97,7 @@ export async function gundemGonder(_o: Sonuc | null, formData: FormData): Promis
       gundem_gonderim_yontemi: yontem,
     })
     .eq("id", id);
-  if (error) return { hata: "İşlenemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "İşlenemedi") };
 
   revalidatePath(YOL);
   return { ok: "Gündem paylaşıldı olarak işaretlendi" };
@@ -128,7 +129,7 @@ export async function toplantiyiBitir(_o: Sonuc | null, formData: FormData): Pro
       sonuc_gonderim_yontemi: "panel",
     })
     .eq("id", id);
-  if (error) return { hata: "Bitirilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Bitirilemedi") };
 
   // Toplantı bitince sıradaki otomatik açılır — gündem birikmeye başlasın.
   const sonraki = new Date(t.tarih + "T00:00:00");
@@ -168,7 +169,7 @@ export async function gundemEkle(_o: Sonuc | null, formData: FormData): Promise<
     aciklama: metin(formData, "aciklama"),
     ekleyen_id: profile.id,
   });
-  if (error) return { hata: "Eklenemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Eklenemedi") };
 
   revalidatePath(YOL);
   return { ok: "Gündem maddesi eklendi" };
@@ -181,7 +182,7 @@ export async function gundemSil(_o: Sonuc | null, formData: FormData): Promise<S
   const supabase = await createClient();
   // RLS: yalnızca ekleyen kişi veya raportör silebilir.
   const { error } = await supabase.from("toplanti_gundem").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
   revalidatePath(YOL);
   return { ok: "Gündem maddesi silindi" };
 }
@@ -198,7 +199,7 @@ export async function gundemNotKaydet(_o: Sonuc | null, formData: FormData): Pro
     .from("toplanti_gundem")
     .update({ toplanti_notu: metin(formData, "toplanti_notu"), karar: metin(formData, "karar") })
     .eq("id", id);
-  if (error) return { hata: "Kaydedilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Kaydedilemedi") };
 
   revalidatePath(YOL);
   return { ok: "Not ve karar kaydedildi" };
@@ -229,7 +230,7 @@ export async function gorevAta(_o: Sonuc | null, formData: FormData): Promise<So
     atanan_id: atanan,
     termin,
   });
-  if (error) return { hata: "Görev atanamadı: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Görev atanamadı") };
 
   revalidatePath(YOL);
   return { ok: "Görev atandı" };
@@ -255,7 +256,7 @@ export async function gorevDurumGuncelle(_o: Sonuc | null, formData: FormData): 
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
-  if (error) return { hata: "Güncellenemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Güncellenemedi") };
 
   revalidatePath(YOL);
   return { ok: durum === "tamamlandi" ? "Görev tamamlandı olarak işaretlendi" : "Görev güncellendi" };
@@ -292,7 +293,7 @@ export async function ertelemeTalep(_o: Sonuc | null, formData: FormData): Promi
     gerekce,
     talep_eden_id: profile.id,
   });
-  if (error) return { hata: "Talep açılamadı: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Talep açılamadı") };
 
   revalidatePath(YOL);
   return { ok: "Erteleme talebi genel müdür onayına gönderildi" };
@@ -323,7 +324,7 @@ export async function ertelemeKarar(_o: Sonuc | null, formData: FormData): Promi
       karar_notu: metin(formData, "karar_notu"),
     })
     .eq("id", id);
-  if (error) return { hata: "Karar işlenemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Karar işlenemedi") };
 
   // Termin YALNIZCA onaydan sonra değişir.
   if (karar === "onaylandi") {
@@ -355,7 +356,7 @@ export async function ayarKaydet(_o: Sonuc | null, formData: FormData): Promise<
       updated_at: new Date().toISOString(),
     })
     .eq("id", 1);
-  if (error) return { hata: "Kaydedilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Kaydedilemedi") };
 
   revalidatePath(YOL);
   return { ok: "Toplantı ayarları kaydedildi" };

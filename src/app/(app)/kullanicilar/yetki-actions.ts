@@ -5,6 +5,7 @@ import { requireProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SAYFALAR } from "@/lib/yetkiler";
 import { SIKAYET_ROLLERI } from "@/lib/sikayet-rol";
+import { hataMesaji } from "@/lib/hata";
 
 type Sonuc = { hata?: string; ok?: string };
 
@@ -87,7 +88,7 @@ export async function yetkiKaydet(_onceki: Sonuc | null, formData: FormData): Pr
         hata: "Yetki alanları veritabanında yok. 0004_yetkilendirme.sql çalıştırılmalı.",
       };
     }
-    return { hata: "Kaydedilemedi: " + error.message };
+    return { hata: hataMesaji(error.message, "Kaydedilemedi") };
   }
 
   revalidatePath("/kullanicilar");
@@ -109,13 +110,13 @@ export async function subeKapsamiKaydet(
   const subeIdler = formData.getAll("sube").map((x) => String(x)).filter(Boolean);
 
   const { error: silHata } = await admin.from("sube_erisim").delete().eq("profil_id", id);
-  if (silHata) return { hata: "Eski kapsam temizlenemedi: " + silHata.message };
+  if (silHata) return { hata: hataMesaji(silHata.message, "Eski kapsam temizlenemedi") };
 
   if (subeIdler.length) {
     const { error } = await admin
       .from("sube_erisim")
       .insert(subeIdler.map((sid) => ({ profil_id: id, sube_id: sid })));
-    if (error) return { hata: "Şube kapsamı kaydedilemedi: " + error.message };
+    if (error) return { hata: hataMesaji(error.message, "Şube kapsamı kaydedilemedi") };
   }
 
   revalidatePath("/kullanicilar");

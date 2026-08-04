@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { AYLAR_12 } from "@/types/database";
+import { hataMesaji } from "@/lib/hata";
 
 export interface AktarilacakSatir {
   subeId: string;
@@ -57,7 +58,7 @@ export async function satislariAktar(satirlar: AktarilacakSatir[]) {
 
   if (eksikAylar.length) {
     const { error } = await supabase.from("aylar").upsert(eksikAylar, { onConflict: "yil,ay" });
-    if (error) return { hata: "Ay tanımları eklenemedi: " + error.message, yazilan: 0 };
+    if (error) return { hata: hataMesaji(error.message, "Ay tanımları eklenemedi"), yazilan: 0 };
   }
 
   const PARCA = 500;
@@ -78,7 +79,7 @@ export async function satislariAktar(satirlar: AktarilacakSatir[]) {
 
     if (error) {
       return {
-        hata: `${yazilan} satır yazıldıktan sonra hata: ${error.message}`,
+        hata: `${yazilan} satır yazıldıktan sonra durdu. ${hataMesaji(error.message, "Yazılamadı")}`,
         yazilan,
       };
     }
@@ -124,7 +125,7 @@ export async function donemSatislariniSil(yil: number, ay: string) {
     .eq("ay", ay)
     .select("id");
 
-  if (error) return { hata: "Silinemedi: " + error.message, silinen: 0 };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi"), silinen: 0 };
 
   revalidatePath("/aylar-veri");
   revalidatePath("/ice-disa-aktar");

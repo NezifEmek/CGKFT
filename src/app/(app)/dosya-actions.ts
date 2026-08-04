@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireProfile } from "@/lib/auth";
 import { KOVA, type Dosya } from "@/lib/dosya";
 import { dosyalariKaydet, formdanDosyalar } from "@/lib/dosya-kaydet";
+import { hataMesaji } from "@/lib/hata";
 
 type Sonuc = { hata?: string; ok?: string };
 
@@ -80,7 +81,7 @@ export async function dosyaBaglantilari(
     .in("id", idler)
     .returns<{ id: string; yol: string }[]>();
 
-  if (error) return { url: {}, hata: tabloHatasi(error.message) ?? error.message };
+  if (error) return { url: {}, hata: tabloHatasi(error.message) ?? hataMesaji(error.message, "Okunamadı") };
   if (!data?.length) return { url: {} };
 
   const admin = createAdminClient();
@@ -88,7 +89,7 @@ export async function dosyaBaglantilari(
     .from(KOVA)
     .createSignedUrls(data.map((d) => d.yol), 300);
 
-  if (imzaHata) return { url: {}, hata: "Bağlantı üretilemedi: " + imzaHata.message };
+  if (imzaHata) return { url: {}, hata: hataMesaji(imzaHata.message, "Bağlantı üretilemedi") };
 
   const url: Record<string, string> = {};
   imzalar?.forEach((imza, i) => {
@@ -111,7 +112,7 @@ export async function dosyaBaglantisi(dosyaId: string): Promise<{ url?: string; 
     .eq("id", dosyaId)
     .maybeSingle<{ yol: string; ad: string }>();
 
-  if (error) return { hata: tabloHatasi(error.message) ?? "Dosya okunamadı: " + error.message };
+  if (error) return { hata: tabloHatasi(error.message) ?? hataMesaji(error.message, "Dosya okunamadı") };
   // RLS kaydı gizlediyse burada null döner — yetkisiz kişi bağlantı alamaz.
   if (!kayit) return { hata: "Dosya bulunamadı ya da görme yetkiniz yok." };
 
@@ -120,7 +121,7 @@ export async function dosyaBaglantisi(dosyaId: string): Promise<{ url?: string; 
     .from(KOVA)
     .createSignedUrl(kayit.yol, 300, { download: kayit.ad });
 
-  if (imzaHata) return { hata: "Bağlantı üretilemedi: " + imzaHata.message };
+  if (imzaHata) return { hata: hataMesaji(imzaHata.message, "Bağlantı üretilemedi") };
   return { url: data.signedUrl };
 }
 
@@ -140,7 +141,7 @@ export async function dosyaSil(_o: Sonuc | null, formData: FormData): Promise<So
 
   // Önce veritabanı: RLS silmeye izin vermezse Storage'a dokunmayalım.
   const { error } = await supabase.from("dosyalar").delete().eq("id", id);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   const admin = createAdminClient();
   await admin.storage.from(KOVA).remove([kayit.yol]);

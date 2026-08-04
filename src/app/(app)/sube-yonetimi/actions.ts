@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { koordinatCoz } from "@/lib/konum";
+import { hataMesaji } from "@/lib/hata";
 
 /** Formdan gelen şube alanlarını okur (ekle ve güncelle ortak). */
 function alanlariOku(formData: FormData, bolgeKilidi: string | null) {
@@ -82,7 +83,8 @@ function subeHatasi(
   if (/duplicate key/i.test(mesaj)) {
     return `"${alanlar.kod}" kodu başka bir şubede kullanılıyor. Kodu değiştirin.`;
   }
-  return (guncelleme ? "Güncellenemedi: " : "Eklenemedi: ") + mesaj;
+  // Geri kalan her şey ortak çeviriciye — zorunlu alan, biçim, bağlı kayıt…
+  return hataMesaji(mesaj, guncelleme ? "Güncellenemedi" : "Eklenemedi");
 }
 
 export async function subeKaydet(_onceki: { hata?: string; ok?: boolean } | null, formData: FormData) {
@@ -123,7 +125,7 @@ export async function subeSil(_onceki: { hata?: string; ok?: boolean } | null, f
 
   const supabase = await createClient();
   const { error } = await supabase.from("subeler").delete().eq("id", subeId);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   revalidatePath("/sube-yonetimi");
   revalidatePath("/subeler");

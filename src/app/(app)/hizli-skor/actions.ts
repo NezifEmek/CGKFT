@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireProfile } from "@/lib/auth";
 import { SKOR_TURLERI } from "@/lib/skor";
+import { hataMesaji } from "@/lib/hata";
 
 export async function skorKaydet(
   _onceki: { hata?: string; ok?: string } | null,
@@ -37,7 +38,7 @@ export async function skorKaydet(
     detay: { tur },
   });
 
-  if (error) return { hata: "Skor kaydedilemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Skor kaydedilemedi") };
 
   revalidatePath("/hizli-skor");
   return { hata: undefined, ok: `${tur} · ${yuvarlanmis}/100 kaydedildi` };
@@ -54,7 +55,7 @@ export async function skorSil(
   const supabase = await createClient();
   // RLS: kullanıcı yalnızca yetkili olduğu kayıtları silebilir.
   const { error } = await supabase.from("skorlar").delete().eq("id", skorId);
-  if (error) return { hata: "Silinemedi: " + error.message };
+  if (error) return { hata: hataMesaji(error.message, "Silinemedi") };
 
   revalidatePath("/hizli-skor");
   return { hata: undefined, ok: "Kayıt silindi" };
