@@ -85,6 +85,35 @@ export function sayiCoz(ham: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Sütun BAŞLIĞINDAN ay çıkarır.
+ *
+ * "ŞUBE DATABASE-V5.xlsx" dosyasında aylar başlıkta ay adı olarak değil,
+ * Excel TARİH KODU olarak duruyor: 45658 = 2025-01-01 … 46204 = 2026-07-01.
+ * Arada bir de "2025 TOPLAM" sütunu var; o metin olduğu için tarih
+ * çözümüne takılmıyor ve kendiliğinden dışarıda kalıyor.
+ *
+ * Sayıya tarih derken dar davranılıyor: yıl 2015–2100 aralığında olmalı.
+ * Yoksa "2025" gibi düz bir başlık 1905'e çözülüp ay sütunu sanılırdı.
+ */
+function basliktanAy(ham: unknown): { ay: string; yil: number | null } | null {
+  const b = katla(ham);
+  if (!b) return null;
+
+  const adla = AYLAR_12.find((a) => katla(a) === b);
+  if (adla) return { ay: adla, yil: null };
+
+  // "TOPLAM", "2025 TOPLAM" gibi özet sütunları asla ay sayılmamalı.
+  if (b.includes("TOPLAM") || b.includes("ORTALAMA") || b.includes("GENEL")) return null;
+
+  const tarih = excelTarihiCoz(ham);
+  if (!tarih) return null;
+  const yil = Number(tarih.slice(0, 4));
+  const ayNo = Number(tarih.slice(5, 7));
+  if (yil < 2015 || yil > 2100 || ayNo < 1 || ayNo > 12) return null;
+  return { ay: AYLAR_12[ayNo - 1], yil };
+}
+
 /** Hücreden ay adı çıkarır: "TEMMUZ", "07", tarih ya da Excel seri no. */
 function ayCoz(ham: unknown): { ay: string; yil: number | null } | null {
   if (ham == null || ham === "") return null;
@@ -158,9 +187,14 @@ export function satislariCoz(
     (kod && koda.get(kod)) || (ad && ada.get(ad)) || null;
 
   // ── Düzeni belirle ────────────────────────────────────────────────────
-  const aySutunlari = basliklar
-    .map((b, i) => ({ b, i }))
-    .filter(({ b }) => AYLAR_12.some((a) => katla(a) === b));
+  // Ham başlık kullanılıyor (katlanmış değil): tarih kodu sayı olarak
+  // gelmeli ki 45658 → 2025-01 çözülebilsin.
+  const hamBasliklar = grid[baslikIdx] ?? [];
+  const aySutunlari = hamBasliklar
+    .map((h, i) => ({ bilgi: basliktanAy(h), i }))
+    .filter((x): x is { bilgi: { ay: string; yil: number | null }; i: number } =>
+      Boolean(x.bilgi),
+    );
 
   const aySutun = basliklar.findIndex((b) => AY_BASLIKLARI.includes(b));
 
@@ -172,31 +206,16 @@ export function satislariCoz(
 
   const hucre = (satir: unknown[], i: number) => (i >= 0 ? satir[i] : "");
 
-  if (aySutunlari.length) {
-    // ── GENİŞ düzen ─────────────────────────────────────────────────────
-    for (const satir of veriSatirlari) {
-      if (!satir?.length) continue;
-      const kod = katla(hucre(satir, kodSutun));
-      const ad = katla(hucre(satir, adSutun));
-      const sube = subeBul(kod, ad);
-      if (!sube) {
-        if (kod || ad) eslesmeyen.add(String(hucre(satir, adSutun) || hucre(satir, kodSutun)));
-        continue;
-      }
-      for (const { i } of aySutunlari) {
-        const kg = sayiCoz(satir[i]);
-        // Boş hücre "veri yok" demek; 0 ile karıştırılmamalı.
-        if (kg == null || kg < 0) continue;
-        const ay = AYLAR_12.find((a) => katla(a) === basliklar[i])!;
-        aylar.add(ay);
-        yillar.add(varsayilanYil);
-        satirlar.push({ subeId: sube.id, yil: varsayilanYil, ay, kg });
-      }
-    }
-    notlar.push(`Geniş düzen tanındı: aylar sütun başlıklarında (${aySutunlari.length} ay).`);
-    return { bicim: "genis", satirlar, eslesmeyen: [...eslesmeyen], aylar: [...aylar], yillar: [...yillar], notlar };
-  }
-
+  // ── Düzen seçimi: "AY" SÜTUNU VARSA UZUN DÜZEN KAZANIR ────────────────
+  //
+  // Sıra önemli. Şirketin uzun düzen raporunda değer sütununun başlığı bir
+  // tarih ("46204"); yeni eklenen tarih tanıma yüzünden o sütun "geniş
+  // düzen ay sütunu" sanılabiliyor. Tek aylı dosyada sonuç aynı çıkıyor
+  // ama ÇOK AYLI bir uzun dosyada bütün satırlar başlıktaki tek aya
+  // yazılırdı — sessiz ve büyük bir hata.
+  //
+  // Satır başına ay bilgisi taşıyan bir "AY" sütunu varsa doğru okuma
+  // her zaman uzun düzendir; geniş düzenin böyle bir sütuna ihtiyacı yok.
   if (aySutun >= 0) {
     // ── UZUN düzen ──────────────────────────────────────────────────────
     const degerSutun = degerSutunuBul(basliklar, veriSatirlari, aySutun, [kodSutun, adSutun]);
@@ -206,6 +225,10 @@ export function satislariCoz(
           "Miktarın olduğu sütunun başlığına 'KG' ya da 'Miktar' yazın.",
       );
     }
+
+    // Değer sütununun başlığı tarihse (ör. 46204), yıl oradan alınıyor —
+    // AY sütununda yalnızca "TEMMUZ" yazsa bile yıl doğru çıksın.
+    const basliktanYil = basliktanAy(hamBasliklar[degerSutun])?.yil ?? null;
 
     for (const satir of veriSatirlari) {
       if (!satir?.length) continue;
@@ -221,20 +244,56 @@ export function satislariCoz(
       const kg = sayiCoz(satir[degerSutun]);
       if (kg == null || kg < 0) continue;
 
-      const yil = ayBilgi.yil ?? varsayilanYil;
+      const yil = ayBilgi.yil ?? basliktanYil ?? varsayilanYil;
       aylar.add(ayBilgi.ay);
       yillar.add(yil);
       satirlar.push({ subeId: sube.id, yil, ay: ayBilgi.ay, kg });
     }
 
     notlar.push(
-      `Uzun düzen tanındı: ay "${String(grid[baslikIdx]?.[aySutun] ?? "AY").trim()}" ` +
-        `sütununda, miktar "${String(grid[baslikIdx]?.[degerSutun] ?? "").trim() || "(başlıksız)"}" sütununda.`,
+      `Uzun düzen tanındı: ay "${String(hamBasliklar[aySutun] ?? "AY").trim()}" sütununda, ` +
+        `miktar "${String(hamBasliklar[degerSutun] ?? "").trim() || "(başlıksız)"}" sütununda.`,
     );
-    if (!yillar.size || [...yillar].every((y) => y === varsayilanYil)) {
-      notlar.push(`Dosyada yıl bilgisi yok; seçili yıl (${varsayilanYil}) kullanıldı.`);
-    }
+    notlar.push(
+      basliktanYil
+        ? `Yıl, miktar sütununun başlığındaki tarihten okundu: ${basliktanYil}.`
+        : `Dosyada yıl bilgisi yok; seçili yıl (${varsayilanYil}) kullanıldı.`,
+    );
     return { bicim: "uzun", satirlar, eslesmeyen: [...eslesmeyen], aylar: [...aylar], yillar: [...yillar], notlar };
+  }
+
+  if (aySutunlari.length) {
+    // ── GENİŞ düzen ─────────────────────────────────────────────────────
+    for (const satir of veriSatirlari) {
+      if (!satir?.length) continue;
+      const kod = katla(hucre(satir, kodSutun));
+      const ad = katla(hucre(satir, adSutun));
+      const sube = subeBul(kod, ad);
+      if (!sube) {
+        if (kod || ad) eslesmeyen.add(String(hucre(satir, adSutun) || hucre(satir, kodSutun)));
+        continue;
+      }
+      for (const { bilgi, i } of aySutunlari) {
+        const kg = sayiCoz(satir[i]);
+        // Boş hücre "veri yok" demek; 0 ile karıştırılmamalı.
+        if (kg == null || kg < 0) continue;
+        // Başlık tarihse yıl ORADAN gelir — tek dosyada birden çok yıl
+        // olabiliyor (2025 ve 2026 aynı sayfada).
+        const yil = bilgi.yil ?? varsayilanYil;
+        aylar.add(bilgi.ay);
+        yillar.add(yil);
+        satirlar.push({ subeId: sube.id, yil, ay: bilgi.ay, kg });
+      }
+    }
+    const tarihliAy = aySutunlari.filter((x) => x.bilgi.yil != null).length;
+    notlar.push(
+      `Geniş düzen tanındı: ${aySutunlari.length} ay sütunu` +
+        (tarihliAy
+          ? ` (başlıklar tarih olarak yazılmış, yıl dosyadan okundu: ${[...yillar].sort().join(", ")})`
+          : ` — yıl seçili yıldan alındı (${varsayilanYil})`) +
+        ".",
+    );
+    return { bicim: "genis", satirlar, eslesmeyen: [...eslesmeyen], aylar: [...aylar], yillar: [...yillar], notlar };
   }
 
   throw new Error(

@@ -54,6 +54,37 @@ function alanlariOku(formData: FormData, bolgeKilidi: string | null) {
   };
 }
 
+/**
+ * Veritabanı hatasını kullanıcının anlayacağı dile çevirir.
+ *
+ * Yetki reddi "new row violates row-level security policy" diye geliyordu;
+ * kullanıcı bundan ne yapması gerektiğini çıkaramıyor. 2026-08-04'te
+ * "yeni şube ekleyemiyorlar" sorunu tam olarak bu yüzden günlerce
+ * teşhis edilemedi.
+ */
+function subeHatasi(
+  mesaj: string,
+  guncelleme: boolean,
+  alanlar: { bolge: string; merkez_yetkilisi: string; kod: string },
+): string {
+  if (/row-level security|row level security/i.test(mesaj)) {
+    return (
+      `Bu şubeyi ${guncelleme ? "güncelleme" : "ekleme"} yetkiniz yok. ` +
+      `Şube "${alanlar.bolge}" bölgesine, merkez yetkilisi "${
+        alanlar.merkez_yetkilisi || "(boş)"
+      }" olarak kaydedilmek isteniyor. ` +
+      `Sık görülen iki sebep: (1) kullanıcı ayarlarınızda yazma izni kapalı olabilir, ` +
+      `(2) kapsamınız o bölgeyi kapsamıyor olabilir. ` +
+      `Yeni şube açıyorsanız "Merkez Yetkilisi" alanına kendi adınızı yazmak çoğu durumda yeterlidir. ` +
+      `Yetkiler Kullanıcılar ekranından yönetilir.`
+    );
+  }
+  if (/duplicate key/i.test(mesaj)) {
+    return `"${alanlar.kod}" kodu başka bir şubede kullanılıyor. Kodu değiştirin.`;
+  }
+  return (guncelleme ? "Güncellenemedi: " : "Eklenemedi: ") + mesaj;
+}
+
 export async function subeKaydet(_onceki: { hata?: string; ok?: boolean } | null, formData: FormData) {
   const profile = await requireProfile();
   if (profile.rol === "denetmen") {
@@ -73,7 +104,7 @@ export async function subeKaydet(_onceki: { hata?: string; ok?: boolean } | null
     ? await supabase.from("subeler").update({ ...alanlar, updated_at: new Date().toISOString() }).eq("id", subeId)
     : await supabase.from("subeler").insert(alanlar);
 
-  if (error) return { hata: (subeId ? "Güncellenemedi: " : "Eklenemedi: ") + error.message };
+  if (error) return { hata: subeHatasi(error.message, Boolean(subeId), alanlar) };
 
   revalidatePath("/sube-yonetimi");
   revalidatePath("/subeler");
