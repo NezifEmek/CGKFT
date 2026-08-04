@@ -37,7 +37,7 @@ export default async function FranchiseBasvurulariSayfasi() {
   // Serbest metin olduğu sürece "Genel Ekip" gibi kişi olmayan değerler
   // giriliyordu; bunlar kimsenin faaliyet raporuna düşmüyordu.
   const { data: profiller } = await supabase
-    .from("profiles")
+    .from("profil_dizini")
     .select("ad_soyad")
     .order("ad_soyad")
     .returns<{ ad_soyad: string | null }[]>();

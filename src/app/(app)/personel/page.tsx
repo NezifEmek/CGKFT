@@ -25,7 +25,7 @@ export default async function PersonelSayfasi() {
       .select("pozisyonlar")
       .eq("id", 1)
       .maybeSingle<{ pozisyonlar: unknown }>(),
-    supabase.from("profiles").select("id, ad_soyad").order("ad_soyad").returns<Profile[]>(),
+    supabase.from("profil_dizini").select("id, ad_soyad").order("ad_soyad").returns<Profile[]>(),
   ]);
 
   // Görev tanımının "içeriği dolu mu" sorusu: amaç, günlük görevler ve

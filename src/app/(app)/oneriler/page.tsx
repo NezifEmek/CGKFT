@@ -29,7 +29,7 @@ export default async function OnerilerSayfasi() {
     tumSatirlariGetir<{ oneri_id: string; profil_id: string }>((f, t) =>
       supabase.from("oneri_destekleri").select("*").range(f, t),
     ).catch(() => [] as { oneri_id: string; profil_id: string }[]),
-    supabase.from("profiles").select("id, ad_soyad").returns<Profile[]>(),
+    supabase.from("profil_dizini").select("id, ad_soyad").returns<Profile[]>(),
   ]);
 
   const destekSay = new Map<string, number>();

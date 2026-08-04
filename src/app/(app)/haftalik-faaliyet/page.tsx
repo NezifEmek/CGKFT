@@ -61,7 +61,7 @@ export default async function HaftalikFaaliyetSayfasi({
     sikayetAtamalari,
     { data: dokData },
   ] = await Promise.all([
-    supabase.from("profiles").select("id, ad_soyad, rol, pozisyon_id").returns<Profile[]>(),
+    supabase.from("profil_dizini").select("id, ad_soyad, rol, pozisyon_id").returns<Profile[]>(),
     tumSatirlariGetir<SubeKisa>((f, t) =>
       supabase.from("subeler").select("id, ad, aktif").range(f, t).returns<SubeKisa[]>(),
     ),

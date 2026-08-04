@@ -30,7 +30,7 @@ export default async function ToplantilarSayfasi() {
       yakala("toplanti_gundem", tumSatirlariGetir<Gundem>((f, t) => supabase.from("toplanti_gundem").select("*").range(f, t))),
       yakala("toplanti_gorevleri", tumSatirlariGetir<Gorev>((f, t) => supabase.from("toplanti_gorevleri").select("*").range(f, t))),
       yakala("gorev_ertelemeleri", tumSatirlariGetir<Erteleme>((f, t) => supabase.from("gorev_ertelemeleri").select("*").range(f, t))),
-      supabase.from("profiles").select("id, ad_soyad").order("ad_soyad").returns<Profile[]>(),
+      supabase.from("profil_dizini").select("id, ad_soyad").order("ad_soyad").returns<Profile[]>(),
       supabase
         .from("toplanti_ayarlari")
         .select("raportor_id, katilimcilar")

@@ -8,11 +8,25 @@ export interface GridSube {
   ad: string;
   bolge: string;
   tip: "MS" | "FR";
+  /** Filtreler ve Excel çıktısı için — Nezif'in isteği */
+  kod: string;
+  il: string;
+  ilce: string;
+  merkezYetkilisi: string;
+  aktif: boolean;
 }
 
 type Durum = "bekliyor" | "kaydedildi" | "hata";
 
 const sayiFmt = new Intl.NumberFormat("tr-TR");
+
+const secim =
+  "rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2 py-1.5 text-sm";
+
+/** Filtre açılır listesi için benzersiz, boşları atılmış, Türkçe sıralı değerler. */
+function benzersiz(subeler: GridSube[], al: (s: GridSube) => string): string[] {
+  return [...new Set(subeler.map(al).filter(Boolean))].sort((a, b) => a.localeCompare(b, "tr"));
+}
 
 export function KgGrid({
   subeler,
@@ -38,20 +52,92 @@ export function KgGrid({
 
   const [arama, setArama] = useState("");
   const [bolgeFiltre, setBolgeFiltre] = useState("");
+  const [yetkiliFiltre, setYetkiliFiltre] = useState("");
+  const [ilFiltre, setIlFiltre] = useState("");
+  const [tipFiltre, setTipFiltre] = useState("");
+  // Kapananlar VARSAYILAN GÖRÜNÜR. Bu bir veri giriş ekranı: kapanmış
+  // şubenin kapanmadan önceki ayları hâlâ dolu ve alttaki ay toplamları
+  // yalnızca görünen satırları sayıyor. Gizleseydik toplamlar Genel
+  // Bakış'takinden düşük çıkar, kimse sebebini anlamazdı.
+  const [kapananlariGizle, setKapananlariGizle] = useState(false);
 
-  const bolgeler = useMemo(
-    () => [...new Set(subeler.map((s) => s.bolge))].sort(),
-    [subeler],
-  );
+  const bolgeler = useMemo(() => benzersiz(subeler, (s) => s.bolge), [subeler]);
+  const yetkililer = useMemo(() => benzersiz(subeler, (s) => s.merkezYetkilisi), [subeler]);
+  const iller = useMemo(() => benzersiz(subeler, (s) => s.il), [subeler]);
 
   const listelenen = useMemo(() => {
     const q = arama.trim().toLocaleLowerCase("tr");
     return subeler.filter((s) => {
+      if (kapananlariGizle && s.aktif === false) return false;
       if (bolgeFiltre && s.bolge !== bolgeFiltre) return false;
+      if (yetkiliFiltre && s.merkezYetkilisi !== yetkiliFiltre) return false;
+      if (ilFiltre && s.il !== ilFiltre) return false;
+      if (tipFiltre && s.tip !== tipFiltre) return false;
       if (!q) return true;
-      return s.ad.toLocaleLowerCase("tr").includes(q);
+      // Kod ve ilçe de aranabilsin: "M03-003SA" ya da "SANDIKLI" yazınca bulsun.
+      return [s.ad, s.kod, s.ilce, s.il].some((x) =>
+        (x ?? "").toLocaleLowerCase("tr").includes(q),
+      );
     });
-  }, [subeler, arama, bolgeFiltre]);
+  }, [subeler, arama, bolgeFiltre, yetkiliFiltre, ilFiltre, tipFiltre, kapananlariGizle]);
+
+  const filtreVar =
+    Boolean(arama || bolgeFiltre || yetkiliFiltre || ilFiltre || tipFiltre) || kapananlariGizle;
+
+  function filtreleriTemizle() {
+    setArama("");
+    setBolgeFiltre("");
+    setYetkiliFiltre("");
+    setIlFiltre("");
+    setTipFiltre("");
+    setKapananlariGizle(false);
+  }
+
+  /**
+   * Ekranda görüneni Excel'e indirir.
+   *
+   * Filtre uygulanmışsa yalnızca süzülen şubeler iniyor — kullanıcı ne
+   * görüyorsa onu indirmeyi bekliyor. Sütunlar filtrelerle aynı alanları
+   * taşıyor ki dosya üzerinde de aynı kırılımlar yapılabilsin.
+   */
+  async function excelIndir() {
+    const XLSX = await import("xlsx");
+    const satirlar = listelenen.map((s) => {
+      const r: Record<string, string | number> = {
+        Kod: s.kod,
+        Şube: s.ad,
+        Tip: s.tip === "MS" ? "MŞ" : "FR",
+        Bölge: s.bolge,
+        İl: s.il,
+        İlçe: s.ilce,
+        "Merkez Yetkilisi": s.merkezYetkilisi,
+        Durum: s.aktif === false ? "Kapalı" : "Açık",
+      };
+      let toplam = 0;
+      for (const ay of aylar) {
+        const v = Number(degerler[anahtar(s.id, ay)]);
+        // Boş hücre 0 olarak inmiyor: "veri yok" ile "0 kg" farklı.
+        r[ay] = Number.isFinite(v) ? v : "";
+        if (Number.isFinite(v)) toplam += v;
+      }
+      r["TOPLAM"] = toplam;
+      return r;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(satirlar);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `${yil} kg`);
+    const cikti = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(
+      new Blob([cikti], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+    );
+    a.download = `aylik-kg-${yil}${filtreVar ? "-filtreli" : ""}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
 
   function anahtar(subeId: string, ay: string) {
     return `${subeId}|${ay}`;
@@ -118,19 +204,51 @@ export function KgGrid({
           placeholder="Şube ara…"
           className="flex-1 min-w-40 rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2.5 py-1.5 text-sm"
         />
-        <select
-          value={bolgeFiltre}
-          onChange={(e) => setBolgeFiltre(e.target.value)}
-          className="rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2 py-1.5 text-sm"
-        >
+        <select value={bolgeFiltre} onChange={(e) => setBolgeFiltre(e.target.value)} className={secim}>
           <option value="">Tüm bölgeler</option>
-          {bolgeler.map((b) => (
-            <option key={b} value={b}>
-              {b}
-            </option>
-          ))}
+          {bolgeler.map((b) => <option key={b} value={b}>{b}</option>)}
         </select>
-        <span className="text-xs text-neutral-500">{listelenen.length} şube</span>
+        <select value={yetkiliFiltre} onChange={(e) => setYetkiliFiltre(e.target.value)} className={secim}>
+          <option value="">Tüm merkez yetkilileri</option>
+          {yetkililer.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <select value={ilFiltre} onChange={(e) => setIlFiltre(e.target.value)} className={secim}>
+          <option value="">Tüm iller</option>
+          {iller.map((i) => <option key={i} value={i}>{i}</option>)}
+        </select>
+        <select value={tipFiltre} onChange={(e) => setTipFiltre(e.target.value)} className={secim}>
+          <option value="">MŞ + FR</option>
+          <option value="MS">Merkez Şube</option>
+          <option value="FR">Franchise</option>
+        </select>
+        <label className="flex items-center gap-1.5 text-xs text-neutral-500 whitespace-nowrap">
+          <input
+            type="checkbox"
+            checked={kapananlariGizle}
+            onChange={(e) => setKapananlariGizle(e.target.checked)}
+          />
+          Kapananları gizle
+        </label>
+
+        <span className="text-xs text-neutral-500 whitespace-nowrap">
+          {listelenen.length} şube
+        </span>
+        {filtreVar && (
+          <button
+            type="button"
+            onClick={filtreleriTemizle}
+            className="text-xs text-neutral-500 hover:underline whitespace-nowrap"
+          >
+            temizle
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={excelIndir}
+          className="ml-auto rounded-md border border-neutral-300 dark:border-neutral-700 px-3 py-1.5 text-sm whitespace-nowrap"
+        >
+          ⬇ Excel indir
+        </button>
       </div>
 
       {duzenlenebilir && (

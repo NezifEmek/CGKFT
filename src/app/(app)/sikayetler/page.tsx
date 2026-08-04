@@ -65,7 +65,7 @@ export default async function SikayetlerSayfasi() {
     tumSatirlariGetir<SubeKisa>((f, t) =>
       supabase.from("subeler").select("id, ad, aktif, kod, il, ilce").range(f, t).returns<SubeKisa[]>(),
     ),
-    supabase.from("profiles").select("id, ad_soyad").returns<Profile[]>(),
+    supabase.from("profil_dizini").select("id, ad_soyad").returns<Profile[]>(),
     // Şikayetteki "Ürün" alanı artık serbest metin değil, Günlük Üretim
     // ekranında tanımlı ürünlerden seçiliyor (Nezif'in isteği). Tablo yoksa
     // ya da hiç ürün tanımlanmamışsa ekran serbest metne düşer.

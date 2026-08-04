@@ -36,6 +36,11 @@ export default async function AylarVeriSayfasi({
     ad: s.ad,
     bolge: s.bolge,
     tip: s.tip,
+    kod: s.kod ?? "",
+    il: s.il ?? "",
+    ilce: s.ilce ?? "",
+    merkezYetkilisi: s.merkez_yetkilisi ?? "",
+    aktif: s.aktif !== false,
   }));
 
   const baslangicDegerler: Record<string, number> = {};

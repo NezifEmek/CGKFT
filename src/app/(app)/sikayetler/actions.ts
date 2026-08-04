@@ -270,7 +270,7 @@ export async function atamaDegistir(_o: Sonuc | null, formData: FormData): Promi
 
   // Atama da geçmişe düşsün.
   const { data: kisi } = await supabase
-    .from("profiles").select("ad_soyad").eq("id", kisiId).maybeSingle<{ ad_soyad: string }>();
+    .from("profil_dizini").select("ad_soyad").eq("id", kisiId).maybeSingle<{ ad_soyad: string }>();
   await supabase.from("sikayet_hareketleri").insert({
     sikayet_id: id,
     tur: "atama",

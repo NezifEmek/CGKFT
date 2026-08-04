@@ -131,7 +131,7 @@ export default async function KpiTakibiSayfasi({
         .range(f, t)
         .returns<{ sikayet_id: string; profil_id: string }[]>(),
     ).catch(() => [] as { sikayet_id: string; profil_id: string }[]),
-    supabase.from("profiles").select("id, ad_soyad").returns<{ id: string; ad_soyad: string }[]>(),
+    supabase.from("profil_dizini").select("id, ad_soyad").returns<{ id: string; ad_soyad: string }[]>(),
   ]);
 
   const gunMap = gunSayisiMap(aylar ?? []);

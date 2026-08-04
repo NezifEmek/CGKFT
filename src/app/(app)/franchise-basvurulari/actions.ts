@@ -347,7 +347,7 @@ export async function topluSorumluAta(
   const ad = yeniSorumlu.trim();
   if (ad) {
     const { data: kisi } = await supabase
-      .from("profiles")
+      .from("profil_dizini")
       .select("ad_soyad")
       .eq("ad_soyad", ad)
       .maybeSingle<{ ad_soyad: string }>();
