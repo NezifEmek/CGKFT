@@ -89,3 +89,45 @@ export async function satislariAktar(satirlar: AktarilacakSatir[]) {
   revalidatePath("/");
   return { hata: null, yazilan, eklenenAy: eksikAylar.length };
 }
+
+/**
+ * Bir dönemin (yıl + ay) satış kayıtlarını siler.
+ *
+ * Nezif: "yüklediğimizi diğer verileri bozmadan silebilmemiz de çok
+ * önemli." Yanlış dosya yüklendiğinde tek çare, o dönemi temizleyip
+ * doğrusunu yüklemek.
+ *
+ * Silme YALNIZCA verilen yıl+ay ile sınırlı; başka ay ya da yıl asla
+ * etkilenmez. `ay` doğrulanıyor, boş/serbest metin kabul edilmiyor —
+ * hatalı bir değer geniş bir silmeye dönüşmesin.
+ *
+ * Ay TANIMI silinmiyor, yalnızca kg kayıtları. Ay tanımı ekranların
+ * dönem listesini kuruyor; onu silmek başka raporları bozardı.
+ */
+export async function donemSatislariniSil(yil: number, ay: string) {
+  const profile = await requireProfile();
+  if (profile.rol !== "admin" && profile.rol !== "genel_mudur") {
+    return { hata: "Dönem silme yetkisi admin ve genel müdürdedir.", silinen: 0 };
+  }
+  if (!Number.isInteger(yil) || yil < 2000 || yil > 2100) {
+    return { hata: "Yıl geçersiz.", silinen: 0 };
+  }
+  if (!AYLAR_12.includes(ay as (typeof AYLAR_12)[number])) {
+    return { hata: "Ay geçersiz.", silinen: 0 };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("aylik_satislar")
+    .delete()
+    .eq("yil", yil)
+    .eq("ay", ay)
+    .select("id");
+
+  if (error) return { hata: "Silinemedi: " + error.message, silinen: 0 };
+
+  revalidatePath("/aylar-veri");
+  revalidatePath("/ice-disa-aktar");
+  revalidatePath("/");
+  return { hata: null, silinen: data?.length ?? 0 };
+}

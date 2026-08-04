@@ -80,6 +80,8 @@ export default async function IceDisaAktarSayfasi({
         aylar={tumAylar}
         varsayilanYil={secilenYil}
         yazabilir={profile.rol !== "denetmen"}
+        // Dönem silme geri alınamaz — yalnızca admin ve genel müdür.
+        yonetimMi={profile.rol === "admin" || profile.rol === "genel_mudur"}
       />
     </div>
   );

@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import * as XLSX from "xlsx";
-import { satislariAktar, type AktarilacakSatir } from "./actions";
+import { satislariAktar, donemSatislariniSil, type AktarilacakSatir } from "./actions";
+import { satislariCoz } from "@/lib/satis-aktarim";
 import { AYLAR_12 } from "@/types/database";
 
 export interface AktarSube {
@@ -22,14 +23,6 @@ export interface AktarSatis {
   kg: number;
 }
 
-/** Türkçe karakterleri de doğru büyütüp boşlukları sadeleştirir. */
-function normalize(s: string): string {
-  return String(s ?? "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLocaleUpperCase("tr");
-}
-
 function dosyaIndir(icerik: Blob, ad: string) {
   const url = URL.createObjectURL(icerik);
   const a = document.createElement("a");
@@ -42,11 +35,17 @@ function dosyaIndir(icerik: Blob, ad: string) {
 const dugmeSinif =
   "rounded-md border border-neutral-300 dark:border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-800";
 
+const gir =
+  "rounded-md border border-neutral-300 dark:border-neutral-700 bg-transparent px-2.5 py-1.5 text-sm";
+
 interface Onizleme {
   satirlar: AktarilacakSatir[];
   eslesmeyen: string[];
   aylar: string[];
-  yil: number;
+  yillar: number[];
+  notlar: string[];
+  bicim: string;
+  toplamKg: number;
   dosyaAdi: string;
 }
 
@@ -56,17 +55,53 @@ export function AktarArayuz({
   aylar,
   varsayilanYil,
   yazabilir,
+  yonetimMi,
 }: {
   subeler: AktarSube[];
   satislar: AktarSatis[];
   aylar: { yil: number; ay: string; gun_sayisi: number }[];
   varsayilanYil: number;
   yazabilir: boolean;
+  /** Dönem silme yetkisi — geri alınamaz işlem */
+  yonetimMi: boolean;
 }) {
   const [onizleme, setOnizleme] = useState<Onizleme | null>(null);
   const [hata, setHata] = useState<string | null>(null);
   const [sonuc, setSonuc] = useState<string | null>(null);
   const [bekliyor, basla] = useTransition();
+
+  // ── Dönem silme ───────────────────────────────────────────────────────
+  const [silYil, setSilYil] = useState(varsayilanYil);
+  const [silAy, setSilAy] = useState<string>(AYLAR_12[0]);
+  const [silmeSonuc, setSilmeSonuc] = useState<string | null>(null);
+
+  const silYillari = [...new Set([varsayilanYil, ...satislar.map((s) => s.yil)])].sort(
+    (a, b) => b - a,
+  );
+  const silinecekler = satislar.filter((s) => s.yil === silYil && s.ay === silAy);
+  const silinecekSayi = silinecekler.length;
+  const silinecekKg = silinecekler.reduce((t, s) => t + (Number(s.kg) || 0), 0);
+
+  function donemiSil() {
+    const ayAdi = silAy.charAt(0) + silAy.slice(1).toLocaleLowerCase("tr");
+    if (
+      !window.confirm(
+        `${ayAdi} ${silYil} dönemindeki ${silinecekSayi} şube kaydı ` +
+          `(${silinecekKg.toLocaleString("tr-TR")} kg) silinecek.\n\n` +
+          `Başka ay ve yıllara dokunulmayacak. Emin misiniz?`,
+      )
+    ) {
+      return;
+    }
+    basla(async () => {
+      const r = await donemSatislariniSil(silYil, silAy);
+      setSilmeSonuc(
+        r.hata
+          ? r.hata
+          : `✓ ${ayAdi} ${silYil}: ${r.silinen} kayıt silindi. Sayfayı yenileyin.`,
+      );
+    });
+  }
 
   const yilAylari = [...new Set(aylar.filter((a) => a.yil === varsayilanYil).map((a) => a.ay))].sort(
     (a, b) => AYLAR_12.indexOf(a as never) - AYLAR_12.indexOf(b as never),
@@ -125,69 +160,39 @@ export function AktarArayuz({
 
     try {
       const buf = await dosya.arrayBuffer();
+      // cellDates kapalı: tarihler ham seri numarası olarak gelsin
+      // (bkz. @/lib/excel-tarih — saat dilimi kayması sorunu).
       const wb = XLSX.read(buf, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       if (!ws) throw new Error("Dosyada sayfa bulunamadı.");
 
-      const satirlar = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
-      if (!satirlar.length) throw new Error("Sayfa boş görünüyor.");
+      // header:1 ile ham ızgara okunuyor. Nesne olarak okumak, başlığı
+      // sayı olan sütunlarda ("46204") ve yinelenen başlıklarda sorun
+      // çıkarıyordu.
+      const grid = XLSX.utils.sheet_to_json<unknown[]>(ws, {
+        header: 1,
+        blankrows: false,
+        defval: null,
+        raw: true,
+      });
 
-      // Ay sütunlarını başlıklardan bul.
-      const basliklar = Object.keys(satirlar[0]);
-      const ayBasliklari = basliklar.filter((b) =>
-        AYLAR_12.includes(normalize(b) as (typeof AYLAR_12)[number]),
-      );
-      if (!ayBasliklari.length) {
+      const c = satislariCoz(grid, subeler, varsayilanYil);
+      if (!c.satirlar.length) {
         throw new Error(
-          "Ay sütunu bulunamadı. Başlık satırında OCAK, ŞUBAT… gibi ay adları olmalı.",
+          "Dosya tanındı ama yazılacak satır çıkmadı — hiçbir şube eşleşmedi ya da " +
+            "miktar sütunu boş." +
+            (c.eslesmeyen.length ? ` Eşleşmeyen kodlar: ${c.eslesmeyen.slice(0, 5).join(", ")}` : ""),
         );
       }
 
-      // Şube eşleştirme: önce kod, sonra ad.
-      const koda = new Map<string, AktarSube>();
-      const ada = new Map<string, AktarSube>();
-      for (const s of subeler) {
-        if (s.kod) koda.set(normalize(s.kod), s);
-        ada.set(normalize(s.ad), s);
-      }
-
-      const kodBaslik = basliklar.find((b) => normalize(b) === "KOD");
-      const adBaslik = basliklar.find((b) => ["ŞUBE", "SUBE", "ŞUBE ADI", "AD"].includes(normalize(b)));
-      if (!adBaslik && !kodBaslik) {
-        throw new Error("Şube sütunu bulunamadı ('Kod' ya da 'Şube' başlığı gerekli).");
-      }
-
-      const cikti: AktarilacakSatir[] = [];
-      const eslesmeyen = new Set<string>();
-
-      for (const satir of satirlar) {
-        const kod = kodBaslik ? normalize(String(satir[kodBaslik])) : "";
-        const ad = adBaslik ? normalize(String(satir[adBaslik])) : "";
-        const sube = (kod && koda.get(kod)) || (ad && ada.get(ad)) || null;
-
-        if (!sube) {
-          if (ad || kod) eslesmeyen.add(ad || kod);
-          continue;
-        }
-
-        for (const basligi of ayBasliklari) {
-          const ham = String(satir[basligi] ?? "").trim().replace(/\./g, "").replace(",", ".");
-          if (ham === "") continue; // boş = veri yok, dokunma
-          const kg = Number(ham);
-          if (!Number.isFinite(kg) || kg < 0) continue;
-          cikti.push({ subeId: sube.id, yil: varsayilanYil, ay: normalize(basligi), kg });
-        }
-      }
-
-      if (!cikti.length) {
-        throw new Error("Eşleşen şube / geçerli kg değeri bulunamadı.");
-      }
-
       setOnizleme({
-        satirlar: cikti,
-        eslesmeyen: [...eslesmeyen].slice(0, 20),
-        aylar: ayBasliklari.map(normalize),
-        yil: varsayilanYil,
+        satirlar: c.satirlar,
+        eslesmeyen: c.eslesmeyen,
+        aylar: c.aylar,
+        yillar: c.yillar,
+        notlar: c.notlar,
+        bicim: c.bicim,
+        toplamKg: c.satirlar.reduce((t, s) => t + s.kg, 0),
         dosyaAdi: dosya.name,
       });
     } catch (err) {
@@ -274,18 +279,41 @@ export function AktarArayuz({
             </div>
             <ul className="text-sm text-amber-800 dark:text-amber-300 space-y-0.5">
               <li>
-                <b>{onizleme.satirlar.length}</b> hücre {onizleme.yil} yılına yazılacak
+                <b>{onizleme.satirlar.length}</b> şube kaydı ·{" "}
+                <b>{onizleme.toplamKg.toLocaleString("tr-TR")} kg</b>
               </li>
-              <li>Aylar: {onizleme.aylar.join(", ")}</li>
-              {onizleme.eslesmeyen.length > 0 && (
-                <li className="text-red-700 dark:text-red-400">
-                  Eşleşmeyen {onizleme.eslesmeyen.length} satır atlanacak:{" "}
-                  {onizleme.eslesmeyen.join(", ")}
+              <li>
+                Dönem: {onizleme.aylar.join(", ")} / {onizleme.yillar.join(", ")}
+              </li>
+              {onizleme.notlar.map((n) => (
+                <li key={n} className="text-amber-700 dark:text-amber-400 text-xs">
+                  {n}
                 </li>
-              )}
+              ))}
             </ul>
+
+            {/* Eşleşmeyen şubeler ayrı ve GÖRÜNÜR: sessizce atlanan satır,
+                toplamı fark ettirmeden eksiltir. Kullanıcı önce şubeyi
+                tanımlayıp dosyayı yeniden yüklemeli. */}
+            {onizleme.eslesmeyen.length > 0 && (
+              <div className="mt-2 rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 p-2.5">
+                <div className="text-sm font-medium text-red-800 dark:text-red-300">
+                  {onizleme.eslesmeyen.length} şube sistemde bulunamadı — bu satırlar
+                  YAZILMAYACAK
+                </div>
+                <div className="text-xs text-red-700 dark:text-red-400 mt-1 break-words">
+                  {onizleme.eslesmeyen.join(", ")}
+                </div>
+                <div className="text-xs text-red-700 dark:text-red-400 mt-1">
+                  Bunlar muhtemelen yeni açılan şubeler. Önce <b>Şube Yönetimi</b>&apos;nden
+                  ekleyip dosyayı tekrar yükleyin, yoksa satışları toplama girmez.
+                </div>
+              </div>
+            )}
+
             <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">
-              Bu işlem mevcut kg değerlerinin üzerine yazar. Öncesinde JSON yedek almanız önerilir.
+              Aynı şube-ay için kayıt varsa üzerine yazılır; <b>diğer aylara ve
+              şubelere dokunulmaz</b>. Yine de öncesinde JSON yedek almanız önerilir.
             </p>
             <div className="flex items-center gap-2 mt-3">
               <button
@@ -308,6 +336,67 @@ export function AktarArayuz({
           </div>
         )}
       </div>
+
+      {/* Dönem silme */}
+      {yonetimMi && (
+        <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4">
+          <h3 className="font-medium text-sm mb-1">Bir dönemin satışlarını sil</h3>
+          <p className="text-xs text-neutral-500 mb-3">
+            Yanlış dosya yüklediyseniz o dönemi temizleyip doğrusunu yükleyebilirsiniz.
+            Silme <b>yalnızca seçtiğiniz yıl ve ay</b> ile sınırlıdır; diğer ayların ve
+            yılların verisine dokunulmaz. Ay tanımı da silinmez, sadece kg kayıtları.
+          </p>
+
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="block">
+              <span className="block text-xs text-neutral-500 mb-1">Yıl</span>
+              <select
+                value={silYil}
+                onChange={(e) => setSilYil(Number(e.target.value))}
+                className={gir}
+              >
+                {silYillari.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-xs text-neutral-500 mb-1">Ay</span>
+              <select value={silAy} onChange={(e) => setSilAy(e.target.value)} className={gir}>
+                {AYLAR_12.map((a) => (
+                  <option key={a} value={a}>
+                    {a.charAt(0) + a.slice(1).toLocaleLowerCase("tr")}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="text-sm text-neutral-600 dark:text-neutral-400 pb-2">
+              {silinecekSayi > 0 ? (
+                <>
+                  <b>{silinecekSayi}</b> şube kaydı ·{" "}
+                  <b>{silinecekKg.toLocaleString("tr-TR")} kg</b>
+                </>
+              ) : (
+                "bu dönemde kayıt yok"
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={donemiSil}
+              disabled={bekliyor || silinecekSayi === 0}
+              className="rounded-md border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 px-4 py-2 text-sm font-medium disabled:opacity-50"
+            >
+              {bekliyor ? "Siliniyor…" : "Bu dönemi sil"}
+            </button>
+          </div>
+
+          {silmeSonuc && (
+            <div className="mt-3 rounded-lg border border-neutral-200 dark:border-neutral-800 p-3 text-sm">
+              {silmeSonuc}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
