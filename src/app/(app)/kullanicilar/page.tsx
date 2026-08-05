@@ -76,6 +76,8 @@ export default async function KullanicilarSayfasi() {
       bolge: k.bolge,
       eposta: a?.eposta ?? "",
       sonGiris: a?.sonGiris ?? null,
+      // Asıl "kullanıyor mu" ölçüsü — bkz. 0026.
+      sonHareket: k.son_hareket ?? null,
       engelliMi: a?.engelliMi ?? false,
       denetimSayisi: denetimSay.get(k.id) ?? 0,
       skorSayisi: skorSay.get(k.id) ?? 0,
@@ -150,7 +152,7 @@ export default async function KullanicilarSayfasi() {
               <th className="px-4 py-2">E-posta</th>
               <th className="px-4 py-2">Rol</th>
               <th className="px-4 py-2">Bölge</th>
-              <th className="px-4 py-2">Son giriş</th>
+              <th className="px-4 py-2">Son hareket</th>
               <th className="px-4 py-2">Durum</th>
             </tr>
           </thead>
@@ -163,6 +165,7 @@ export default async function KullanicilarSayfasi() {
                 subeler={yetkiSubeler}
                 pozisyonlar={yetkiPozisyonlar}
                 benMiyim={k.id === profile.id}
+                simdi={simdi}
               />
             ))}
             {!satirlar.length && (

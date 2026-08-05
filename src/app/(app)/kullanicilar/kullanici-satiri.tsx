@@ -24,6 +24,8 @@ export interface KullaniciSatiriVerisi {
   bolge: string | null;
   eposta: string;
   sonGiris: string | null;
+  /** Panelde en son işlem yapılan an — asıl "kullanıyor mu" ölçüsü (0026). */
+  sonHareket: string | null;
   engelliMi: boolean;
   denetimSayisi: number;
   skorSayisi: number;
@@ -41,14 +43,49 @@ function tarihFmt(s: string | null): string {
   });
 }
 
+/**
+ * "3 dakika önce", "2 gün önce" gibi okunur mesafe.
+ *
+ * Ham tarihten daha hızlı okunuyor: yönetici listeye bakarken "kim aktif,
+ * kim değil" sorusunu saniyede cevaplamak istiyor.
+ */
+function gecenSure(s: string | null, simdi: number): string {
+  if (!s) return "—";
+  const fark = simdi - new Date(s).getTime();
+  if (!Number.isFinite(fark) || fark < 0) return "az önce";
+  const dk = Math.floor(fark / 60000);
+  if (dk < 2) return "az önce";
+  if (dk < 60) return `${dk} dakika önce`;
+  const saat = Math.floor(dk / 60);
+  if (saat < 24) return `${saat} saat önce`;
+  const gun = Math.floor(saat / 24);
+  if (gun === 1) return "dün";
+  if (gun < 30) return `${gun} gün önce`;
+  const ay = Math.floor(gun / 30);
+  return ay < 12 ? `${ay} ay önce` : `${Math.floor(ay / 12)} yıl önce`;
+}
+
+/** Son hareket ne kadar eskiyse o kadar soluk gösteriliyor. */
+function hareketRengi(s: string | null, simdi: number): string {
+  if (!s) return "text-neutral-400";
+  const gun = (simdi - new Date(s).getTime()) / 86400000;
+  if (gun < 1) return "text-emerald-600 font-medium";
+  if (gun < 7) return "text-neutral-700 dark:text-neutral-300";
+  if (gun < 30) return "text-amber-600";
+  return "text-red-500";
+}
+
 export function KullaniciSatiri({
   k,
   bolgeler,
   subeler,
   pozisyonlar,
   benMiyim,
+  simdi,
 }: {
   k: KullaniciSatiriVerisi;
+  /** Sayfa oluşturulduğu an — tüm satırlar aynı ana göre "x gün önce" der. */
+  simdi: number;
   bolgeler: string[];
   subeler: YetkiSube[];
   pozisyonlar: YetkiPozisyon[];
@@ -96,7 +133,22 @@ export function KullaniciSatiri({
         <td className="px-4 py-2 text-neutral-600 dark:text-neutral-400">{k.eposta || "—"}</td>
         <td className="px-4 py-2">{ROL_ETIKET[k.rol]}</td>
         <td className="px-4 py-2 text-neutral-500">{k.bolge || "—"}</td>
-        <td className="px-4 py-2 text-xs text-neutral-500">{tarihFmt(k.sonGiris)}</td>
+        {/* Asıl ölçü SON HAREKET. "Son giriş" altta küçük duruyor: oturum
+            açık kaldıkça değişmediği için tek başına yanıltıcıydı — kişi
+            günlerdir çalışıyorken "5 gündür girmemiş" görünüyordu (0026). */}
+        <td className="px-4 py-2 text-xs">
+          <span className={hareketRengi(k.sonHareket, simdi)}>
+            {gecenSure(k.sonHareket, simdi)}
+          </span>
+          {k.sonHareket && (
+            <span className="block text-[10px] text-neutral-400">
+              {tarihFmt(k.sonHareket)}
+            </span>
+          )}
+          <span className="block text-[10px] text-neutral-400">
+            giriş: {k.sonGiris ? tarihFmt(k.sonGiris) : "hiç"}
+          </span>
+        </td>
         <td className="px-4 py-2">
           {k.engelliMi ? (
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 font-medium">

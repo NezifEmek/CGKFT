@@ -23,6 +23,12 @@ export interface Profile {
   pozisyon_id?: string | null;
   yazabilir?: boolean;
   sayfa_yetkileri?: string[];
+  /**
+   * Panelde en son işlem yapılan an (0026).
+   * auth.users.last_sign_in_at ile KARIŞTIRMAYIN: o yalnızca şifreyle
+   * girişte değişir, oturum açık kaldıkça güncellenmez.
+   */
+  son_hareket?: string | null;
 }
 
 export interface Sube {
