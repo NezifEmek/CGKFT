@@ -105,7 +105,9 @@ export function YanMenuLinkleri({
             <button
               type="button"
               onClick={() => degistir(b.ad)}
-              className="w-full flex items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] uppercase tracking-wide hover:bg-white/5"
+              // Telefonda daha yüksek: parmakla basılacak. Masaüstünde
+              // eski derli toplu haliyle kalıyor.
+              className="w-full flex items-center gap-2 rounded-lg px-3 py-2.5 md:py-1.5 text-[11px] uppercase tracking-wide hover:bg-white/5"
               style={{ color: "#8b93a5" }}
             >
               <span>{b.simge}</span>
@@ -124,7 +126,7 @@ export function YanMenuLinkleri({
                     <Link
                       key={m.href}
                       href={m.href}
-                      className="block rounded-lg pl-6 pr-3 py-1.5 text-[13px] transition-colors"
+                      className="block rounded-lg pl-6 pr-3 py-3 md:py-1.5 text-[13px] transition-colors"
                       style={
                         aktif
                           ? { background: "#c0392b", color: "#fff", fontWeight: 600 }
